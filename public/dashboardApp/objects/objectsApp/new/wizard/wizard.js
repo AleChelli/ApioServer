@@ -33,6 +33,13 @@ angular.module('ApioDashboardApplication')
               { "type" : "Due" },
               { "type" : "Tre" }
           ]
+      },{
+          "id" : "2",
+          "family" : "Apio",
+          "types" : [
+              { "type" : "Dongle" },
+              { "type" : "General" }
+          ]
       }
   ];
 
