@@ -172,7 +172,7 @@ Apio.Serial.Error.prototype.name = "Apio.Serial.Error";
 
 
 Apio.Serial.Configuration = {
-	port : "/dev/tty.usbmodem641",
+	port : "/dev/tty.usbmodem411",
 	baudrate : 115200
 }
 /*

@@ -12,7 +12,7 @@ var domain = require('domain');
 var async = require('async');
 var request = require('request');
 var net = require('net');
-var ENVIRONMENT = "productio";
+var ENVIRONMENT = "production";
 var targz = require('tar.gz');
 var formidable = require('formidable');
 
