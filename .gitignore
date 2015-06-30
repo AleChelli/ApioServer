@@ -32,3 +32,15 @@ public/sketchbook/*
 # Users Environment Variables
 .lock-wscript
 *~
+
+
+data/posti_blocco/*
+
+
+data/apio_cloud/*
+
+
+data/apio_estintori/*
+data/apio/*
+
+upload/*

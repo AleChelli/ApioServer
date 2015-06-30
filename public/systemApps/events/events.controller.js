@@ -22,13 +22,14 @@
 angular.module('ApioApplication')
     .controller('ApioEventsController', ['$scope', '$http', 'socket', 'objectService', "DataSource", "$modal",
         function($scope, $http, socket, objectService, DataSource, $modal) {
+
             document.getElementById("targetBody").style.position = "";
                 $("#ApioApplicationContainer").hide(function(){
                     $("#ApioApplicationContainer").html("");
                 });
-				
+
 			     $("#notificationsCenter").slideUp(500);
-			
+
             //var startX, startY;
             //Touch event
             /*
@@ -51,16 +52,16 @@ angular.module('ApioApplication')
             window.swipe('editEventPanel', function (){
                 document.getElementById("ApioEventsContainer").classList.remove('event_open_edit_state');
             });
-            
-            
+
+
 	            window.affix('editEventPanel','myAffix',null,0,function(){
-	            	
+
 		            document.getElementById('myAffix').classList.add('add_new_guest');
-		           
+
 	            },function(){
 		            document.getElementById('myAffix').classList.remove('add_new_guest');
 	            });
-			
+
             //Mouse event
             /*
             $("#editEventPanel").on("mousedown", function(event){
@@ -79,7 +80,7 @@ angular.module('ApioApplication')
                 }
             });
 			*/
-			
+
             var startX_, startY_;
             //Touch event
             $("#editEventRunPanel").on("touchstart", function(event){
@@ -125,6 +126,15 @@ angular.module('ApioApplication')
                     }
                 }
                 return flag;
+            };
+
+            $scope.goToEventsPanel = function(){
+                $("#editEventPanel").hide("slide", {
+                    direction: 'right'
+                }, 500, function () {
+                    document.getElementById("ApioEventsContainer").classList.remove("openAppIconStyle");
+                    document.getElementById("ApioEventsContainer").classList.remove("event_open_edit_state");
+                });
             };
 
             $scope.loadRunModifier = function(){
@@ -424,10 +434,10 @@ angular.module('ApioApplication')
             }
             $scope.showBack = function() {
                 if ($scope.currentFormStep == 'sceltaTipo'){
-                	
+
                     return false;}
                 else{
-                	
+
                     return true;
                     }
             }
@@ -512,7 +522,7 @@ angular.module('ApioApplication')
             };
 
             $scope.saveEvent = function() {
-				
+
                 console.log("Mi accingo a salvare il seguente evento");
 
                 console.log($scope.newEvent);
@@ -582,13 +592,13 @@ angular.module('ApioApplication')
 
                 }
             }
-            
+
             $scope.goToFormStep = function(step) {
                 $scope.currentFormStep = step;
                 document.getElementById('new_event').classList.add('new_active_back_next');
                 if (step == 'selezioneData')
                     $scope.newEvent.type = "timeTriggered";
-                    
+
 
                 if (step == 'selezioneStatoScatenante') {
                     $scope.newEvent.type = 'stateTriggered';

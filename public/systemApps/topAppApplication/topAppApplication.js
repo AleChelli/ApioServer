@@ -20,7 +20,7 @@
 
 
 var apioApplication = angular.module("ApioApplication");
-apioApplication.directive("topappapplication", ["currentObject", "socket", "$http", "$timeout","$rootScope", function(currentObject, socket, $http, $timeout,$rootScope){
+apioApplication.directive("topappapplication", ["currentObject", "socket", "$http", "$timeout", "$rootScope", "$location", function(currentObject, socket, $http, $timeout, $rootScope, $location){
 	return{
 	    restrict: "E",
 	    replace: true,
@@ -56,6 +56,21 @@ apioApplication.directive("topappapplication", ["currentObject", "socket", "$htt
 			}
 
 			scope.recStep = "";
+
+            scope.goBackToHome = function(){
+                $("#ApioApplicationContainer").hide("slide", {
+                    direction: 'right'
+                }, 500, function () {
+                    Apio.newWidth = Apio.appWidth;
+                    $("#ApioApplicationContainer").css("width", Apio.appWidth+"px");
+                    if (window.innerWidth > 769) {
+                        $("#ApioIconsContainer").css("width", "100%");
+                    }
+                    document.getElementById("ApioApplicationContainer").classList.remove("fullscreen");
+                    $location.path("/app#/home");
+                    scope.$parent.$apply();
+                });
+            };
 
 			scope.saveModify = function(){
 				var toDB = scope.currentObject.record();

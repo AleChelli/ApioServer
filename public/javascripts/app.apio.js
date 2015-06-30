@@ -39,7 +39,8 @@ $("#notificationTrigger_mobile").on('click tap',function() {
     $( "#notificationsCenter" ).toggle( "slide",{ direction : 'up'}, 500 );
 });
 
-var ApioApplication = angular.module('ApioApplication',['ui.bootstrap','ngRoute']);
+var ApioApplication = angular.module('ApioApplication',['ui.bootstrap','ngRoute','hSweetAlert']);
+
 window.swipe = function(target, callback){
 	var startX, startY;
     //Touch event
@@ -341,14 +342,14 @@ var apioProperty = angular.module('apioProperty', ['ApioApplication']);
         packet.properties[prop] = value;
         socket.emit('apio_client_stream',packet);
       },
-      update : function(prop,value,writeDb,writeSerial) {
+      update : function(prop,value,objectId,writeDb,writeSerial) {
         if ('undefined' == typeof writeDb)
           writeDb = true;
         if ('undefined' == typeof writeSerial)
           writeSerial = true;
         obj.properties[prop] = value;
         var o = {
-          objectId : obj.objectId,
+          objectId : typeof objectId !== "undefined" ? objectId : obj.objectId,
           properties : {
 
           },
@@ -418,3 +419,43 @@ var apioProperty = angular.module('apioProperty', ['ApioApplication']);
 
     return $window.sharedService;
   }]);
+
+ApioApplication.controller("ApioMainController", ["socket", "sweet", function (socket, sweet) {
+    socket.on("apio_serial_refresh", function (data) {
+        if(data.refresh === true){
+            var time = 25;
+            sweet.show({
+                title: "Allineamento in corso, tempo rimasto: 25 secondi",
+                text: "Questo messaggio si chiuderà automaticamente",
+                type: "warning",
+                timer: 25000,
+                showCancelButton: false,
+                confirmButtonClass: "btn-success",
+                closeOnConfirm: false
+            });
+
+            var nodes = document.getElementsByClassName("sweet-alert").item(0).childNodes;
+            for (var i in nodes) {
+                if (nodes[i].nodeName === "H2") {
+                    var titleNode = nodes[i];
+                    titleNode.nextSibling.nextSibling.style.display = "none";
+                    break;
+                }
+            }
+            var countdown = setInterval(function () {
+                time--;
+                if (time === 0) {
+                    clearInterval(countdown);
+                }
+                else if (time === 1) {
+                    titleNode.innerHTML = "Allineamento in corso, tempo rimasto: " + time + " secondo";
+                }
+                else {
+                    titleNode.innerHTML = "Allineamento in corso, tempo rimasto: " + time + " secondi";
+                }
+            }, 1000);
+        } else if(data.refresh === false){
+            sweet.close();
+        }
+    });
+}]);

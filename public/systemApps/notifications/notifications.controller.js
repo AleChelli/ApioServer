@@ -20,6 +20,7 @@
 
 
 angular.module('ApioApplication').controller('ApioNotificationController',['$scope','$http','socket',function($scope,$http,socket){
+
         $scope.notifications = [];
         socket.on('apio_notification', function(notification) {
             console.log("Notifica")
@@ -128,7 +129,7 @@ angular.module('ApioApplication').controller('ApioNotificationController',['$sco
 
             // will display time in 10:30:23 format
             var formattedTime = hours + ':' + minutes.substr(minutes.length-2) + ':' + seconds.substr(seconds.length-2);
-            
+
             return formattedTime;
         }
 

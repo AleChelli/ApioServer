@@ -22,6 +22,17 @@
 
 	<style>
 		@media (min-width: 320px) and (max-width: 600px) {
+			.button-back{
+				font-size: 74px;
+				color: rgba(80, 99, 131, 0.72);
+				//border-radius: 300px;
+				border: none;
+			}
+            .go_to_home{
+                width: 70px;
+                height: 70px;
+            }
+
 			.topappbuttoncontainer{
 				width: 100%;
 			}
@@ -50,6 +61,17 @@
 			.topapppubblica{}
 		}
 		@media (min-width: 601px) and (max-width: 1000px){
+			.button-back{
+				font-size: 74px;
+				color: rgba(80, 99, 131, 0.72);
+				//border-radius: 300px;
+				border: none;
+			}
+            .go_to_home{
+                width: 70px;
+                height: 70px;
+            }
+
 			.topappbuttoncontainer{
 				width: 100%;
 			}
@@ -78,6 +100,17 @@
 			.topapppubblica{}
 		}
 		@media (min-width: 1001px){
+			.button-back{
+				font-size: 34px;
+				color: rgba(80, 99, 131, 0.72);
+				//border-radius: 300px;
+				border: none;
+			}
+            .go_to_home{
+                height: 60px;
+                width: 60px;
+            }
+
 			.topappbuttoncontainer{
 				width: 5%;
 				margin-left: auto;
@@ -112,10 +145,13 @@
 		}
 	</style>
 	<div class="topAppApplication">
-		<div class="col-xs-3">
-			<div id="menu_object_networkinput" class="systembutton pubblica" ng-class="{'pubblica_on': currentObject.recordLength() != '0'}" ng-show="currentObject.isRecording() && !currentObject.isModifying() && !showPublishButton" ng-click="useRecording()">Usa</div>
-			<div id="save" class="systembutton pubblica" ng-class="{'pubblica_on': currentObject.recordLength() != '0'}" ng-show="currentObject.isModifying()" ng-click="saveModify()">Salva</div>
-			<div id="publish" class="systembutton pubblica topapppubblica" ng-class="{'pubblica_on': showPublishButtonActive}" ng-show="showPublishButton" ng-click="publishRecording()">Pubblica</div>
+<div class="col-xs-3">
+            <div class="btn btn-default btn-lg button-back">
+<span class="glyphicon glyphicon-circle-arrow-left" ng-show="!currentObject.isRecording() &amp;&amp; !currentObject.isModifying() &amp;&amp; !showPublishButton" ng-click="goBackToHome()"></span>
+</div>
+			<div id="menu_object_networkinput" class="systembutton pubblica ng-hide" ng-class="{'pubblica_on': currentObject.recordLength() != '0'}" ng-show="currentObject.isRecording() &amp;&amp; !currentObject.isModifying() &amp;&amp; !showPublishButton" ng-click="useRecording()">Usa</div>
+			<div id="save" class="systembutton pubblica ng-hide" ng-class="{'pubblica_on': currentObject.recordLength() != '0'}" ng-show="currentObject.isModifying()" ng-click="saveModify()">Salva</div>
+			<div id="publish" class="systembutton pubblica topapppubblica ng-hide" ng-class="{'pubblica_on': showPublishButtonActive}" ng-show="showPublishButton" ng-click="publishRecording()">Pubblica</div>
 		</div>
 		<div class="appName">{{object.name}}</div>
 		<div class="col-xs-3">
@@ -129,7 +165,7 @@
 			<div id="intro_rec" ng-show="currentObject.isRecording() && currentObject.recordLength() > 0"  style="text-align:center;margin-bottom:10px;">"Tap" su Usa per usare questo stato</div>
 		</div>
 	</div>
-	
+
 	<div ng-show="recStep === 'EventOrWall'">
 		<div class="topappbuttoncontainer">
 			<div id="wallbutton" class="topappbutton" ng-click="wallRecording()"><span class="topappbuttonspan">Bacheca</span></div>

@@ -21,6 +21,7 @@
 
 angular.module('ApioApplication').controller('ApioWallController', ['$scope', '$http', 'socket', 'objectService', 'currentObject', '$rootScope',
     function($scope, $http, socket, objectService, currentObject, $rootScope) {
+
         document.getElementById("targetBody").style.position = "";
         $("#ApioApplicationContainer").hide(function(){
             $("#ApioApplicationContainer").html("");
@@ -133,7 +134,7 @@ angular.module('ApioApplication').controller('ApioWallController', ['$scope', '$
                             $scope.$apply();
                         });
                     }, 300);
-                    
+
                 });
 
             });

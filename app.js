@@ -118,7 +118,8 @@ com.list(function (err, ports) {
     Apio.Util.debug("Unable to get serial ports, error: ", err);
   } else {
     ports.forEach(function (port) {
-    if(String(port.manufacturer) === "Apio_Dongle"){
+    console.log(port);
+    if(String(port.manufacturer) === "Apio Dongle"){
       Apio.Serial.Configuration.port = String(port.comName);
       Apio.Serial.init();
     }
@@ -587,6 +588,10 @@ app.get("/app",function(req,res){
          name: "verify"
        }, function(err, doc) {
            if (err) {
+             var sys = require('sys');
+             var exec = require('child_process').exec;
+             var child = exec("mongorestore ./data/apio -d apio");
+
 
             } else {
               if(doc){

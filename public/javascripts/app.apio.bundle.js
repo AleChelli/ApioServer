@@ -1,3 +1,4 @@
+(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 //Copyright 2014-2015 Alex Benfaremo, Alessandro Chelli, Lorenzo Di Berardino, Matteo Di Sabatino
 
 /********************************* LICENSE *******************************
@@ -19,7 +20,6 @@
 *************************************************************************/
 
 
-(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 (function(){
 	"use strict";
 	var Apio = {};
@@ -61,8 +61,8 @@
 	*	@param name The application's name
 	*/
 	Apio.Application.create = function(config) {
-		
-		
+
+
 
 		var app_object = config;
 
@@ -184,6 +184,27 @@ Apio.Util.ApioToJSON = function(str) {
 
 
 },{}],2:[function(require,module,exports){
+//Copyright 2014-2015 Alex Benfaremo, Alessandro Chelli, Lorenzo Di Berardino, Matteo Di Sabatino
+
+/********************************* LICENSE *******************************
+*									 *
+* This file is part of ApioOS.						 *
+*									 *
+* ApioOS is free software released under the GPLv2 license: you can	 *
+* redistribute it and/or modify it under the terms of the GNU General	 *
+* Public License version 2 as published by the Free Software Foundation. *
+*									 *
+* ApioOS is distributed in the hope that it will be useful, but		 *
+* WITHOUT ANY WARRANTY; without even the implied warranty of		 *
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the		 *
+* GNU General Public License version 2 for more details.		 *
+*									 *
+* To read the license either open the file COPYING.txt or		 *
+* visit <http://www.gnu.org/licenses/gpl2.txt>				 *
+*									 *
+*************************************************************************/
+
+
 var Apio = require ('./apio.client.js');
 //var q = require("./bower_components/q");
 //Trova un modo migliore per iniettare le dipendenze
@@ -204,7 +225,8 @@ $("#notificationTrigger_mobile").on('click tap',function() {
     $( "#notificationsCenter" ).toggle( "slide",{ direction : 'up'}, 500 );
 });
 
-var ApioApplication = angular.module('ApioApplication',['ui.bootstrap','ngRoute']);
+var ApioApplication = angular.module('ApioApplication',['ui.bootstrap','ngRoute','hSweetAlert']);
+
 window.swipe = function(target, callback){
 	var startX, startY;
     //Touch event
@@ -506,14 +528,14 @@ var apioProperty = angular.module('apioProperty', ['ApioApplication']);
         packet.properties[prop] = value;
         socket.emit('apio_client_stream',packet);
       },
-      update : function(prop,value,writeDb,writeSerial) {
+      update : function(prop,value,objectId,writeDb,writeSerial) {
         if ('undefined' == typeof writeDb)
           writeDb = true;
         if ('undefined' == typeof writeSerial)
           writeSerial = true;
         obj.properties[prop] = value;
         var o = {
-          objectId : obj.objectId,
+          objectId : typeof objectId !== "undefined" ? objectId : obj.objectId,
           properties : {
 
           },
@@ -584,4 +606,43 @@ var apioProperty = angular.module('apioProperty', ['ApioApplication']);
     return $window.sharedService;
   }]);
 
+ApioApplication.controller("ApioMainController", ["socket", "sweet", function (socket, sweet) {
+    socket.on("apio_serial_refresh", function (data) {
+        if(data.refresh === true){
+            var time = 25;
+            sweet.show({
+                title: "Allineamento in corso, tempo rimasto: 25 secondi",
+                text: "Questo messaggio si chiuderà automaticamente",
+                type: "warning",
+                timer: 25000,
+                showCancelButton: false,
+                confirmButtonClass: "btn-success",
+                closeOnConfirm: false
+            });
+
+            var nodes = document.getElementsByClassName("sweet-alert").item(0).childNodes;
+            for (var i in nodes) {
+                if (nodes[i].nodeName === "H2") {
+                    var titleNode = nodes[i];
+                    titleNode.nextSibling.nextSibling.style.display = "none";
+                    break;
+                }
+            }
+            var countdown = setInterval(function () {
+                time--;
+                if (time === 0) {
+                    clearInterval(countdown);
+                }
+                else if (time === 1) {
+                    titleNode.innerHTML = "Allineamento in corso, tempo rimasto: " + time + " secondo";
+                }
+                else {
+                    titleNode.innerHTML = "Allineamento in corso, tempo rimasto: " + time + " secondi";
+                }
+            }, 1000);
+        } else if(data.refresh === false){
+            sweet.close();
+        }
+    });
+}]);
 },{"./apio.client.js":1}]},{},[2]);
