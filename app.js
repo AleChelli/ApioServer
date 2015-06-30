@@ -20,6 +20,7 @@
 
 
 "use strict";
+var com = require("serialport");
 var express = require("express");
 var path = require("path");
 var logger = require("morgan");
@@ -110,8 +111,20 @@ function puts(error, stdout, stderr) {
 }
 
 
-if (ENVIRONMENT == 'production')
-    Apio.Serial.init();
+/*if (ENVIRONMENT == 'production')
+    Apio.Serial.init();*/
+com.list(function (err, ports) {
+  if (err) {
+    Apio.Util.debug("Unable to get serial ports, error: ", err);
+  } else {
+    ports.forEach(function (port) {
+    if(String(port.manufacturer) === "Apio_Dongle"){
+      Apio.Serial.Configuration.port = String(port.comName);
+      Apio.Serial.init();
+    }
+  });
+  }
+});
 
 Apio.Socket.init(http);
 Apio.Mosca.init();
@@ -853,6 +866,69 @@ Apio.io.on("connection", function(socket){
                 console.log(data);
                 console.log("data.properties vale:");
                 console.log(data.properties);
+                Apio.Database.db.collection("States").findOne({objectId: data.objectId, properties: data.properties}, function (err, result) {
+                    if (err) {
+                        console.log("Error while fetching states");
+                    }
+                    else {
+                        var arr = [];
+                        console.log("result vale:");
+                        console.log(result);
+                        var applyStateFn = function (stateName, callback) {
+                            Apio.Database.db.collection("States").findOne({name: stateName}, function (err, state) {
+                                if (err) {
+                                    console.log("applyState unable to apply state");
+                                    console.log(err);
+                                }
+                                else {
+                                    arr.push(state);
+                                    Apio.Database.updateProperty(state, function () {
+                                        Apio.io.emit("apio_server_update", state);
+                                        Apio.Database.db.collection("Events").find({triggerState: state.name}).toArray(function (err, data) {
+                                            if (err) {
+                                                console.log("error while fetching events");
+                                                console.log(err);
+                                            }
+                                            console.log("Ho trovato eventi scatenati dallo stato " + state.name);
+                                            console.log(data);
+                                            if(callback && data.length == 0){
+                                                callback();
+                                            }
+                                            //data è un array di eventi
+                                            data.forEach(function (ev, ind, ar) {
+                                                var states = ev.triggeredStates;
+                                                states.forEach(function (ee, ii, vv) {
+                                                    applyStateFn(ee.name, callback);
+                                                })
+                                            })
+                                        });
+                                    });
+                                }
+                            });
+                        };
+                        applyStateFn(result.name, function(){
+                            if(ENVIRONMENT == "production"){
+                                var pause = function (millis) {
+                                    var date = new Date();
+                                    var curDate = null;
+                                    do {
+                                        curDate = new Date();
+                                    } while (curDate - date < millis);
+                                };
+
+                                console.log("arr vale:");
+                                console.log(arr);
+                                for(var i in arr){
+                                    Apio.Serial.send(arr[i], function(){
+                                        pause(80);
+                                    })
+                                }
+                                arr = [];
+                            }
+                        });
+                    }
+                });
+
 
             });
         }
@@ -889,7 +965,7 @@ Apio.io.on("connection", function(socket){
                     } else {
                         console.log("Aggiorno data")
                         data.objectId = document.objectId;
-                        
+
                         if (document.hasOwnProperty('notifications')) {
                             for (var prop in data.properties) //prop è il nome della proprietà di cui cerco notifiche
                                 if (document.notifications.hasOwnProperty(prop)) {
@@ -985,7 +1061,7 @@ Apio.io.on("connection", function(socket){
                 })
 
 
-                
+
 
         })
 

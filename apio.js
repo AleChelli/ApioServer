@@ -110,7 +110,7 @@
      */
     Apio.Util.ApioToJSON = function(str) {
         //var regex = /(.[a-z0-9])*\:([a-z0-9]*\:[a-z0-9]*\-).*/gi;
-        var regex = /([lz])?(\w+)\:(send|update|hi|register+)?\:?([\w+\:\w+\-]+)/;
+        var regex = /([lz])?(\w+)\:(send|update|hi|register|request+)?\:?([\w+\:(\w|\w\.\w)+\-]+)/;
         var match = regex.exec(str);
         var obj = {};
         if (Apio.Util.isSet(match[1]))
@@ -120,7 +120,12 @@
             obj.command = match[3];
         var mess = match[4];
         obj.properties = {};
+        var index = mess.indexOf(":-");
         mess = mess.split("-");
+        if(index > -1 && index != mess.length - 1){
+            mess[1] = "-"+mess[1];
+            mess[0] += mess[1];
+        }
         mess.pop();
         mess.forEach(function(e) {
             //newline
@@ -217,6 +222,8 @@
      *	@class Serial
      */
     //FIXME wrappa completamente l"oogetto serialPort
+    var ApioSerialRefresh = false;
+    var checkDongleRecive = "c";
     Apio.Serial = {};
 
     Apio.Serial.Error = function(message) {
@@ -251,11 +258,32 @@
                 baudrate: Apio.Serial.Configuration.baudrate,
                 parser: com.parsers.readline("\r\n")
             });
+            Apio.Serial.serialPort.on("error", function (err){
+                console.log("SERIAL PORT ERROR (0): ", err);
+            });
             Apio.Serial.serialPort.on("open", function() {
                 Apio.Util.debug("Apio.Serial.init() port is now open and listening on " + Apio.Serial.Configuration.port);
-                Apio.Serial.serialPort.on("data", function(serialString) {
+                var d = new Date(), ms = d.getMilliseconds();
+                fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": Apio.Serial.init() port is now open and listening on " + Apio.Serial.Configuration.port+", Apio.Serial.serialFlag = "+Apio.Serial.serialFlag+"\n", function (err) {
+                    if (err) {
+                        console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                    }
+                });
+                Apio.Serial.serialPort.on("data", function (serialString) {
                     serialString = serialString.toString();
                     Apio.Util.debug("Apio.Serial data received " + serialString);
+                    if (serialString === "COORDINATOR ACTIVE") {
+                        var d = new Date(), ms = d.getMilliseconds();
+                        fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": RECEIVED COORDINATOR ACTIVE\n", function (err) {
+                            if (err) {
+                                console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                            }
+                        });
+                    }
+                    if (serialString == "c") {
+                        checkDongleRecive = "c"
+                    }
+
 
                     //TODO add validation
                     //TODO Cambierà in futuro perchè saranno supportati messaggi del
@@ -274,8 +302,21 @@
                             Apio.Util.debug("APIO::SERIAL::DATA:IGNORED String is not well formed");
                         }
                     } else {
-                        Apio.Util.debug("APIO::SERIAL::DATA:IGNORED String is too short ");
-                    }
+                      if (!isNaN(tokens[0]) && !isNaN(tokens[1])) {
+                           Apio.Serial.ACK = Number(tokens[0]) === 1;
+                           Apio.Serial.isRead = true;
+                           //console.log("Apio.Serial.ACK: " + Apio.Serial.ACK);
+                           var d = new Date(), ms = d.getMilliseconds();
+                           fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": ACK = " + tokens[0] + ":" + tokens[1] + "\n", function (err) {
+                               if (err) {
+                                   console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                               }
+                           });
+                       } else {
+                           Apio.Util.debug("APIO::SERIAL::DATA:IGNORED String is too short ");
+                       }
+                       Apio.Util.debug("APIO::SERIAL::DATA:IGNORED String is too short ");
+                     }
                     //Se arriva un evento da seriale non devo subito spararlo ai client, devo prima processarlo
                     //Come in receiveSerialData.php
                 });
@@ -283,6 +324,12 @@
 
             Apio.Serial.serialPort.on("close", function() {
                 Apio.Util.debug("APIO::SERIAL::CLOSED");
+                var d = new Date(), ms = d.getMilliseconds();
+                fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": SERIAL PORT CLOSED (0)\n", function (err) {
+                    if (err) {
+                        console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                    }
+                });
             });
             return Apio.Serial.serialPort;
         }
@@ -294,309 +341,1063 @@
      */
     /*
 
-//Coda di messaggi da inviare con la seriale
-*/
-    Apio.Serial.queue = [];
+    //Coda di messaggi da inviare con la seriale
+    */
+   Apio.Serial.queue = [];
+   Apio.Serial.available = true;
+   Apio.Serial.counter = 0;
+
+   //Ciclo che gestisce la coda
+   /*setInterval(function() {
+    if (Apio.Serial.queue.length > 0 && Apio.Serial.available == true) {
+    Apio.Serial.available = false;
+    var messageToSend = Apio.Serial.queue.shift();
+    console.log("Apio.Serial.queue is processing: " + messageToSend)
+    Apio.Serial.serialPort.write(messageToSend, function(error) {
+    if (error)
+    console.log("An error has occurred while sending " + messageToSend)
+    else
+    console.log("The message '" + messageToSend + "' was correctly written to serial")
     Apio.Serial.available = true;
-
-    //Ciclo che gestisce la coda
-    setInterval(function() {
-        if (Apio.Serial.queue.length > 0 && Apio.Serial.available == true) {
-            Apio.Serial.available = false;
-            var messageToSend = Apio.Serial.queue.shift();
-            console.log("Apio.Serial.queue is processing: " + messageToSend)
-            Apio.Serial.serialPort.write(messageToSend, function(error) {
-                if (error)
-                    console.log("An error has occurred while sending " + messageToSend)
-                else
-                    console.log("The message '" + messageToSend + "' was correctly written to serial")
-                Apio.Serial.available = true;
-            })
-        }
-    }, 100)
-
-    Apio.Serial.stream = function(data,callback) {
-
-        function doTheStreaming(protocol, address, key, value, callback) {
-
-
-            var message = protocol + address + ":" + key + ":" + value + "-";
-                switch (protocol) {
-                    case 'l':
-                    case 'z':
-                    case 's':
-                        if (!Apio.Serial.hasOwnProperty("serialPort")) {
-                            console.log("The serial port is disabled, the following message cannot be sent: " + message);
-                        } else {
-                            Apio.Serial.serialPort.write(message,function(err){
-                                if (err) {
-                                    console.log("An error has occurred while streaming to serialport.")
-                                } else {
-                                    console.log("The message "+message+" was correctly streamed to serial port")
-                                }
-                            })
-                        }
-                        break;
-                    default:
-                        if (fs.existsSync(__dirname+"/public/applications/"+data.objectId+"/adapter.js")) {
-                            var adapter = require(__dirname+"/public/applications/"+data.objectId+"/adapter.js");
-                            console.log("Protocollo " + protocol + " sconosciuto, lancio l'adapter manager, mado questo oggetto:");
-                            console.log(data);
-                            adapter.send(data);
-                            if(callback){
-                                console.log("PARTE LA CALLBACK DELLA SERIAL");
-                                callback();
-                            }
-                        } else {
-                            Apio.Util.debug("Apio.Serial.Send() Error: protocol "+data.protocol+ "is not supported and no adapter was found.");
-                        }
-                        break;
-                }
-        }
-
-        var keys = Object.keys(data.properties);
-        Apio.Database.db.collection('Objects').findOne({
-            objectId: data.objectId
-        }, function(err, doc) {
-            if (err) {
-                console.log("Error while trying to retrieve the serial address. Aborting Serial.send");
-            } else {
-                data.address = doc.address;
-                data.protocol = doc.protocol;
-
-                var counter = 0;
-                var numberOfKeys = keys.length;
-                var available = true;
-                keys.forEach(function(key) {
-                    doTheStreaming(data.protocol, data.address, key, data.properties[key], function(err) {})
-                })
-
-            }
-        })
+    })
     }
+    }, 100)*/
+   var checkDongle;
+   var CCounter = 0;
 
-    Apio.Serial.send = function(data, callback) {
-        //NOTA data dovrebbe mandare soltanto objID e le prop
-        console.log('---------------SerialSend------------------')
-        console.log(data)
-        console.log('-------------------------------------------\n\n')
+   function checkGenericDongle() {
+       console.log("+++++++Reactive checkDongle+++++++");
+       var d = new Date(), ms = d.getMilliseconds();
+       fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": Reactive checkDongle\n", function (err) {
+           if (err) {
+               console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+           }
+       });
+       checkDongle = setInterval(function () {
+           console.log("+++++++Check a Dongle+++++++");
+           var d = new Date(), ms = d.getMilliseconds();
+           fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": Check a Dongle\n", function (err) {
+               if (err) {
+                   console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+               }
+           });
+           if (checkDongleRecive == "c") {
+               checkDongleRecive = "";
+               ApioSerialRefresh = false;
+               Apio.io.emit('apio_serial_refresh', { refresh : false });
+               CCounter++;
+               if(CCounter === 3){
+                   Apio.Serial.serialFlag = true;
+               }
+
+               var d = new Date(), ms = d.getMilliseconds();
+               fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": C RECEIVED, Coordinator alive, CCounter = "+CCounter+"\n", function (err) {
+                   if (err) {
+                       console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                   }
+               });
+           } else {
+               CCounter = 0;
+               ApioSerialRefresh = true;
+               Apio.io.emit('apio_serial_refresh', { refresh : true });
+               setTimeout(checkGenericDongle, 15000);
+               clearInterval(checkDongle);
+           }
+       }, 3000);
+   }
+
+   console.log("+++++++Sto per labciare checkGenericDongle+++++++");
+   checkGenericDongle();
+
+   //Ciclo che gestisce la coda
+   Apio.Serial.counter = 0;
+   Apio.Serial.TotalCounter = 0;
+   Apio.Serial.queueIndex = -1;
+   Apio.Serial.failedSends = 0;
+   Apio.Serial.serialFlag = true;
+   Apio.Serial.isRead = true;
+   var ApioSerialIsOpen = true;
+   var ApioDongleDisconnect = false;
+   var ApioDongleReconnect = 0;
+   setInterval(function () {
+       var trovato;
+       com.list(function (err, ports) {
+           if (err) {
+
+               Apio.Util.debug("APIO::SERIAL::DISCONNECT");
+               var d = new Date(), ms = d.getMilliseconds();
+               fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": (ERROR) APIO::SERIAL::DISCONNECT\n", function (err) {
+                   if (err) {
+                       console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                   }
+               });
+               ApioDongleDisconnect = true;
+           } else {
+               ports.forEach(function (port) {
+
+                   //console.log(port.comName);
+                   if (String(port.comName) == "/dev/ttyACM0") {
+                       ApioDongleDisconnect = false;
+                       trovato = 1;
+
+                   } else if (trovato != 1) {
+                       Apio.Util.debug("APIO::SERIAL::DISCONNECT");
+                       var d = new Date(), ms = d.getMilliseconds();
+                       fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": (trovato != 1) APIO::SERIAL::DISCONNECT\n", function (err) {
+                           if (err) {
+                               console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                           }
+                       });
+                       ApioDongleDisconnect = true;
+                   }
+
+               });
+           }
+       });
+       if (ApioDongleDisconnect) {
+           ApioDongleReconnect = 1;
+       }
+       else if (!ApioDongleDisconnect && ApioDongleReconnect == 1) {
+           ApioDongleReconnect = 2;
+       }
+       if (ApioDongleReconnect == 2) {
+           ApioSerialIsOpen = false;
+           console.log("++++++++++++++NUOVA SERIALE++++++++++++++");
+           ApioDongleReconnect = 0;
+
+           var d = new Date(), ms = d.getMilliseconds();
+           fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": OPENED NEW SERIAL (1)\n", function (err) {
+               if (err) {
+                   console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+               }
+           });
+
+           Apio.Serial.serialPort = new com.SerialPort(Apio.Serial.Configuration.port, {
+               baudrate: Apio.Serial.Configuration.baudrate,
+               parser: com.parsers.readline("\r\n")
+           });
+
+           var d = new Date(), ms = d.getMilliseconds();
+           fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": SVUOTO SERIALE: INIZIO\n", function (err) {
+               if (err) {
+                   console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+               }
+           });
+           while(Apio.Serial.queue.length){
+               var d = new Date(), ms = d.getMilliseconds();
+               fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": SVUOTO SERIALE: CICLO\n", function (err) {
+                   if (err) {
+                       console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                   }
+               });
+               Apio.Serial.queue.shift();
+           }
+           var d = new Date(), ms = d.getMilliseconds();
+           fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": SVUOTO SERIALE: FINE\n", function (err) {
+               if (err) {
+                   console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+               }
+           });
+
+           Apio.Serial.serialPort.on("error", function (err){
+               console.log("SERIAL PORT ERROR (1): ", err);
+               var d = new Date(), ms = d.getMilliseconds();
+               fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": SERIAL PORT ERROR (1)\n", function (err) {
+                   if (err) {
+                       console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                   }
+               });
+           });
+
+           Apio.Serial.serialPort.on("open", function () {
+               Apio.Serial.serialFlag = true;
+               ApioSerialIsOpen = true;
+               Apio.Util.debug("Apio.Serial.init() port is now open and listening on " + Apio.Serial.Configuration.port);
+               var d = new Date(), ms = d.getMilliseconds();
+               fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": Apio.Serial.init() port is now open and listening on " + Apio.Serial.Configuration.port+", Apio.Serial.serialFlag = "+Apio.Serial.serialFlag+"\n", function (err) {
+                   if (err) {
+                       console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                   }
+               });
+               Apio.Serial.serialPort.on("data", function (serialString) {
+                   serialString = serialString.toString();
+                   Apio.Util.debug("SECONDA SERIALE " + serialString);
+                   if (serialString === "COORDINATOR ACTIVE") {
+                       var d = new Date(), ms = d.getMilliseconds();
+                       fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": RECEIVED COORDINATOR ACTIVE\n", function (err) {
+                           if (err) {
+                               console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                           }
+                       });
+                   }
+                   if (serialString == "c") {
+                       checkDongleRecive = "c"
+                   }
+                   var tokens = serialString.split(":");
+                   //Se la serialString è da meno di 4 token significa che non è wellformed (fatta bene)
+                   if (tokens.length >= 4) {
+                       //if (tokens.length >= 1) {
+                       //Impacchetto la stringa ricevuta da seriale in un oggetto
+                       var dataObject = Apio.Util.ApioToJSON(serialString);
+
+                       if (Apio.Util.isSet(dataObject.objectId) && Apio.Util.isSet(dataObject.command))
+                           Apio.Serial.read(dataObject);
+                       else {
+                           //TODO ADD ACTUAL ERROR MANAGEMENT
+                           Apio.Util.debug("APIO::SERIAL::DATA:IGNORED String is not well formed");
+                       }
+                   } else {
+                       if (!isNaN(tokens[0]) && !isNaN(tokens[1])) {
+                           Apio.Serial.ACK = Number(tokens[0]) === 1;
+                           Apio.Serial.isRead = true;
+                           //console.log("Apio.Serial.ACK: " + Apio.Serial.ACK);
+                           var d = new Date(), ms = d.getMilliseconds();
+                           fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": ACK (1) = " + tokens[0] + ":" + tokens[1] + "\n", function (err) {
+                               if (err) {
+                                   console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                               }
+                           });
+                       } else {
+                           Apio.Util.debug("APIO::SERIAL::DATA:IGNORED String is too short ");
+                       }
+                   }
+                   //Se arriva un evento da seriale non devo subito spararlo ai client, devo prima processarlo
+                   //Come in receiveSerialData.php
+               });
+           });
+
+           Apio.Serial.serialPort.on("close", function () {
+               Apio.Util.debug("APIO::SERIAL::CLOSED");
+
+               var d = new Date(), ms = d.getMilliseconds();
+               fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": SERIAL PORT CLOSED (1)\n", function (err) {
+                   if (err) {
+                       console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                   }
+               });
+           });
+           Apio.Serial.isRead = true;
+           Apio.Serial.failedSends = 0;
+       }
+
+       if (Apio.Serial.serialPort && ApioSerialRefresh) {
+           ApioSerialRefresh = false;
+           console.log("ApioDongleReconnect = " + ApioDongleReconnect);
+           console.log("Apio.Serial.isRead = " + Apio.Serial.isRead);
+           console.log("Apio.Serial.failedSends = " + Apio.Serial.failedSends);
+           console.log("+++++++++++++++SECONDA SERIALE+++++++++++++++++++");
+           CCounter = 0;
+           Apio.Serial.serialPort.close(function (error) {
+               if (error) {
+                   console.log("Unable to close Serial Port");
+               }
+               else {
+                   console.log("Serial Port successfully closed");
+                   Apio.Serial.serialFlag = false;
+                   var d = new Date(), ms = d.getMilliseconds();
+                   fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": OPENED NEW SERIAL (2)\n", function (err) {
+                       if (err) {
+                           console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                       }
+                   });
+
+                   Apio.Serial.serialPort = new com.SerialPort(Apio.Serial.Configuration.port, {
+                       baudrate: Apio.Serial.Configuration.baudrate,
+                       parser: com.parsers.readline("\r\n")
+                   });
+
+                   var d = new Date(), ms = d.getMilliseconds();
+                   fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": SVUOTO SERIALE: INIZIO\n", function (err) {
+                       if (err) {
+                           console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                       }
+                   });
+                   while(Apio.Serial.queue.length){
+                       var d = new Date(), ms = d.getMilliseconds();
+                       fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": SVUOTO SERIALE: CICLO\n", function (err) {
+                           if (err) {
+                               console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                           }
+                       });
+                       Apio.Serial.queue.shift();
+                   }
+                   var d = new Date(), ms = d.getMilliseconds();
+                   fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": SVUOTO SERIALE: FINE\n", function (err) {
+                       if (err) {
+                           console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                       }
+                   });
+
+                   Apio.Serial.serialPort.on("error", function (err){
+                       console.log("SERIAL PORT ERROR (2): ", err);
+                       var d = new Date(), ms = d.getMilliseconds();
+                       fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": SERIAL PORT ERROR (2)\n", function (err) {
+                           if (err) {
+                               console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                           }
+                       });
+                   });
+
+                   Apio.Serial.serialPort.on("open", function () {
+                       Apio.Serial.serialFlag = true;
+                       Apio.Util.debug("Apio.Serial.init() port is now open and listening on " + Apio.Serial.Configuration.port);
+                       var d = new Date(), ms = d.getMilliseconds();
+                       fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": Apio.Serial.init() port is now open and listening on " + Apio.Serial.Configuration.port+", Apio.Serial.serialFlag = "+Apio.Serial.serialFlag+"\n", function (err) {
+                           if (err) {
+                               console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                           }
+                       });
+                       Apio.Serial.serialPort.on("data", function (serialString) {
+                           serialString = serialString.toString();
+                           if (serialString === "COORDINATOR ACTIVE") {
+                               var d = new Date(), ms = d.getMilliseconds();
+                               fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": RECEIVED COORDINATOR ACTIVE\n", function (err) {
+                                   if (err) {
+                                       console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                                   }
+                               });
+                           }
+                           Apio.Util.debug("Apio.Serial data received " + serialString);
+                           if (serialString == "c") {
+                               checkDongleRecive = "c"
+                           }
+                           var tokens = serialString.split(":");
+                           if (tokens.length >= 4) {
+                               var dataObject = Apio.Util.ApioToJSON(serialString);
+
+                               if (Apio.Util.isSet(dataObject.objectId) && Apio.Util.isSet(dataObject.command))
+                                   Apio.Serial.read(dataObject);
+                               else {
+                                   Apio.Util.debug("APIO::SERIAL::DATA:IGNORED String is not well formed");
+                               }
+                           } else {
+                               if (!isNaN(tokens[0]) && !isNaN(tokens[1])) {
+                                   Apio.Serial.ACK = Number(tokens[0]) === 1;
+                                   Apio.Serial.isRead = true;
+                                   var d = new Date(), ms = d.getMilliseconds();
+                                   fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": ACK = " + tokens[0] + ":" + tokens[1] + "\n", function (err) {
+                                       if (err) {
+                                           console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                                       }
+                                   });
+                               } else {
+                                   Apio.Util.debug("APIO::SERIAL::DATA:IGNORED String is too short ");
+                               }
+                           }
+                       });
+                   });
+
+                   Apio.Serial.serialPort.on("close", function () {
+                       Apio.Util.debug("APIO::SERIAL::CLOSED");
+
+                       var d = new Date(), ms = d.getMilliseconds();
+                       fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": SERIAL PORT CLOSED (2)\n", function (err) {
+                           if (err) {
+                               console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                           }
+                       });
+                   });
+               }
+           });
+           Apio.Serial.isRead = true;
+           Apio.Serial.failedSends = 0;
+       }
+
+       if (CCounter >= 3 && Apio.Serial.serialFlag && Apio.Serial.queue.length) {
+           if (Apio.Serial.ACK && Apio.Serial.isRead) {
+               if (Apio.Serial.queueIndex > -1) {
+                   Apio.Serial.queue.splice(Apio.Serial.queueIndex, 1);
+               } else {
+                   Apio.Serial.queueIndex++;
+               }
+               var messageToSend = Apio.Serial.queue[Apio.Serial.queueIndex];
+               console.log("Apio.Serial.queue is processing: " + messageToSend);
+               if (messageToSend) {
+                   Apio.Serial.serialPort.write(messageToSend, function (error) {
+                       if (error) {
+                           //console.log("An error has occurred while sending " + messageToSend);
+                           var d = new Date(), ms = d.getMilliseconds();
+                           fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": ACK TRUE, An error has occurred while sending " + messageToSend + "\n", function (err) {
+                               if (err) {
+                                   console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                               }
+                           });
+                       }
+                       else {
+                           Apio.Serial.serialPort.drain(function (err) {
+                               if (err) {
+                                   //console.log("ERROR ON DRAIN: ", err);
+                                   var d = new Date(), ms = d.getMilliseconds();
+                                   fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": ACK TRUE, ERROR ON DRAIN\n", function (err) {
+                                       if (err) {
+                                           console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                                       }
+                                   });
+                               } else {
+                                   //console.log("The message '" + messageToSend + "' was correctly written to serial");
+                                   Apio.Serial.isRead = false;
+                                   var d = new Date(), ms = d.getMilliseconds();
+                                   fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": ACK TRUE, The message '" + messageToSend + "' was correctly written to serial\n", function (err) {
+                                       if (err) {
+                                           console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                                       }
+                                   });
+                                   fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": °°°°°°°°°°°°°°°°°°°INVIATO IL NUMERO "+(Apio.Serial.TotalCounter++)+"°°°°°°°°°°°\n", function (err) {
+                                       if (err) {
+                                           console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                                       }
+                                   });
+                                   console.log("°°°°°°°°°°°°°°°°°°°INVIATO IL NUMERO (1) "+(Apio.Serial.TotalCounter)+"°°°°°°°°°°°");
+                               }
+                           });
+                       }
+                   });
+               }
+           }
+           //else if (Apio.Serial.ACK === false || Apio.Serial.isRead === false){
+           else{
+               Apio.Serial.counter++;
+               if (Apio.Serial.queueIndex === -1) {
+                   Apio.Serial.queueIndex++;
+               }
+               var messageToSend = Apio.Serial.queue[Apio.Serial.queueIndex];
+               if (messageToSend) {
+                   Apio.Serial.serialPort.write(messageToSend, function (error) {
+                       if (error) {
+                           //console.log("An error has occurred while sending " + messageToSend);
+                           var d = new Date(), ms = d.getMilliseconds();
+                           fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": ACK FALSE, An error has occurred while sending " + messageToSend + "\n", function (err) {
+                               if (err) {
+                                   console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                               }
+                           });
+                       }
+                       else {
+                           Apio.Serial.serialPort.drain(function (err) {
+                               if (err) {
+                                   //console.log("ERROR ON DRAIN: ", err);
+                                   var d = new Date(), ms = d.getMilliseconds();
+                                   fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": ACK FALSE, ERROR ON DRAIN\n", function (err) {
+                                       if (err) {
+                                           console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                                       }
+                                   });
+                               } else {
+                                   //console.log("The message '" + messageToSend + "' was correctly written to serial");
+                                   Apio.Serial.isRead = false;
+                                   var d = new Date(), ms = d.getMilliseconds();
+                                   fs.appendFile('/home/pi/log.txt', d + ", " + ms + ": ACK FALSE, The message '" + messageToSend + "' was correctly written to serial\n", function (err) {
+                                       if (err) {
+                                           console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                                       }
+                                   });
+                                   fs.appendFile('/home/pi/log.txt', d + ", " + ms + "°°°°°°°°°°°°°°°°°°°INVIATO IL NUMERO "+(Apio.Serial.TotalCounter++)+"°°°°°°°°°°°\n", function (err) {
+                                       if (err) {
+                                           console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
+                                       }
+                                   });
+                                   console.log("°°°°°°°°°°°°°°°°°°°INVIATO IL NUMERO (2) "+(Apio.Serial.TotalCounter)+"°°°°°°°°°°°");
+                               }
+                           });
+                       }
+                   });
+               }
+
+               if (Apio.Serial.queue.length === 1) {
+                   if (Apio.Serial.counter >= 6) {
+                       Apio.Serial.queue.splice(Apio.Serial.queueIndex, 1);
+                       Apio.Serial.failedSends++;
+                       Apio.Serial.queueIndex = 0;
+                       Apio.Serial.counter = 0;
+                       Apio.Serial.ACK = true;
+                   }
+               }
+               else if (Apio.Serial.counter >= 3) {
+                   Apio.Serial.queue.splice(Apio.Serial.queueIndex, 1);
+                   Apio.Serial.failedSends++;
+                   Apio.Serial.queueIndex = 0;
+                   Apio.Serial.counter = 0;
+                   Apio.Serial.ACK = true;
+               }
+           }
+       }
+       else {
+           Apio.Serial.queueIndex = -1;
+       }
+   }, 40);
+
+   setInterval(function () {
+       if(Apio.Serial.serialPort){
+           Apio.Serial.serialPort.flush(function (error) {
+               if (error) {
+                   console.log("Unable to flush serial port");
+               } else {
+                   console.log("Serial port flushed correctly");
+               }
+           });
+       }
+   }, 10000);
+
+   Apio.Serial.stream = function (data, callback) {
+
+       function doTheStreaming(protocol, address, key, value, callback) {
 
 
-        var packageMessageAndAddToQueue = function(protocol, address, key, value, callback) {
-            var message = protocol + address + ":" + key + ":" + value + "-";
-            switch (protocol) {
-                case 'l':
-                case 'z':
-                case 's':
-                    if (!Apio.Serial.hasOwnProperty("serialPort")) {
-                        console.log("The serial port is disabled, the following message cannot be sent: " + message);
-                    } else {
-                        Apio.Serial.queue.push(message);
-                    }
-                    break;
-                default:
-                    if (fs.existsSync(__dirname+"/public/applications/"+data.objectId+"/adapter.js")) {
-                        var adapter = require(__dirname+"/public/applications/"+data.objectId+"/adapter.js");
-                        console.log("Protocollo " + protocol + " sconosciuto, lancio l'adapter manager, mado questo oggetto:");
-                        console.log(data);
-                        adapter.send(data);
-                        if(callback){
-                            console.log("PARTE LA CALLBACK DELLA SERIAL");
-                            callback();
-                        }
-                    } else {
-                        Apio.Util.debug("Apio.Serial.Send() Error: protocol "+data.protocol+ "is not supported and no adapter was found.");
-                    }
-                    break;
-            }
-        }
+           var message = protocol + address + ":" + key + ":" + value + "-";
+           switch (protocol) {
+               case 'l':
+               case 'z':
+               case 's':
+                   if (!Apio.Serial.hasOwnProperty("serialPort")) {
+                       console.log("The serial port is disabled, the following message cannot be sent: " + message);
+                   } else {
+                       Apio.Serial.serialPort.write(message, function (err) {
+                           if (err) {
+                               console.log("An error has occurred while streaming to serialport.")
+                           } else {
+                               console.log("The message " + message + " was correctly streamed to serial port")
+                           }
+                       })
+                   }
+                   break;
+               default:
+                   if (fs.existsSync(__dirname + "/public/applications/" + data.objectId + "/adapter.js")) {
+                       var adapter = require(__dirname + "/public/applications/" + data.objectId + "/adapter.js");
+                       console.log("Protocollo " + protocol + " sconosciuto, lancio l'adapter manager, mado questo oggetto:");
+                       console.log(data);
+                       adapter.send(data);
+                       if (callback) {
+                           console.log("PARTE LA CALLBACK DELLA SERIAL");
+                           callback();
+                       }
+                   } else {
+                       Apio.Util.debug("Apio.Serial.Send() Error: protocol " + data.protocol + "is not supported and no adapter was found.");
+                   }
+                   break;
+           }
+       }
+
+       var keys = Object.keys(data.properties);
+       Apio.Database.db.collection('Objects').findOne({
+           objectId: data.objectId
+       }, function (err, doc) {
+           if (err) {
+               console.log("Error while trying to retrieve the serial address. Aborting Serial.send");
+           } else {
+               data.address = doc.address;
+               data.protocol = doc.protocol;
+
+               var counter = 0;
+               var numberOfKeys = keys.length;
+               var available = true;
+               keys.forEach(function (key) {
+                   doTheStreaming(data.protocol, data.address, key, data.properties[key], function (err) {
+                   })
+               })
+
+           }
+       })
+   }
+
+   Apio.Serial.send = function (data, callback) {
+       //NOTA data dovrebbe mandare soltanto objID e le prop
+       console.log('---------------SerialSend------------------')
+       console.log(data)
+       console.log('-------------------------------------------\n\n')
 
 
-
-        if(typeof data === "object"){
-            var keys = Object.keys(data.properties);
-
-
-            Apio.Database.db.collection('Objects').findOne({
-                objectId: data.objectId
-            }, function(err, doc) {
-                if (err) {
-                    console.log("Error while trying to retrieve the serial address. Aborting Serial.send");
-                } else {
-                    data.address = doc.address;
-                    data.protocol = doc.protocol;
-
-                    var counter = 0;
-                    var numberOfKeys = keys.length;
-                    var available = true;
-                    keys.forEach(function(key) {
-                        packageMessageAndAddToQueue(data.protocol, data.address, key, data.properties[key], function(err) {})
-                    })
-
-                }
-            })
-        }
-        else if(typeof data === "string"){
-            var protocolAndAddress = data.split(":");
-            protocolAndAddress = protocolAndAddress[0];
-            var dataComponents = data.split("-");
-            for(var i in dataComponents){
-                if(dataComponents[i] !== ""){
-                    if(dataComponents[i].indexOf(protocolAndAddress) > -1){
-                        Apio.Serial.queue.push(dataComponents[i]+"-");
-                    }
-                    else{
-                        Apio.Serial.queue.push(protocolAndAddress+":"+dataComponents[i]+"-");
-                    }
-                }
-            }
-        }
-    }
-    /*
-     *	used when the Server Apio has received some message on the serial from
-     * 	an external Apio Object (mostly a Sensor/Button) which is trying to
-     *	update some information on the database
-     */
-	//var mando = "0";
-    Apio.Serial.read = function(data) {
-
-        //I sensori invieranno le seguenti informazioni
-        //SensorID:command:Chiave:Valore
-        //Quindi la funzione read, deve fare una query nel db per capire quale azione intraprendere
-        //Per il momento invece, in fase di testing, i sensori inviano: TargetADDR:command:chiave:valore
-
-        if (!Apio.Serial.hasOwnProperty("serialPort"))
-            throw new Error("The Apio.Serial service has not been initialized. Please, call Apio.Serial.init() before using it.");
-
-        switch (data.command) {
-            case "send":
-
-                //Prendo i dati ddell"oggetto in db, scrivo in seriale e updato il db.
-                //In seriale verrà mandata una stringa del tipo
-                //objId:command:chiavivalori
-
-                //Invece di fare questa query, dovrò cercare gli eventi associati a quel sensore
-                Apio.Database.getObjectById(data.objectId, function(object) {
-                    //object contiene le informazioni aggiuntive dell'oggetto a cui inviare l'evento
-                    //tra cui l'address e il protocol
-                    data.objectId = object.objectId;
-                    data.protocol = object.protocol;
-
-                    Apio.Serial.send(data); //Mando data perchè ancora i sensori scrivono in seriale l'evento che vogliono scatenare
-                    //Poi invece manderò i dati recuperati dalla query getEventsByTrigger() o qualcosa del genere
-
-                    Apio.Database.updateProperty(data, function() {
-                        //Notificare i client connessi
-
-                        Apio.io.to("apio_client").emit("apio_server_update", data);
-                    });
-                });
-                break;
-            case "update":
-                console.log("> Arrivato un update, mando la notifica");
-                //Prima di tutto cerco la notifica nel db
-                console.log(data);
-                //Controllo Se esiste uno stato che rispecchia lo stato attuale dell'oggetto
+       var packageMessageAndAddToQueue = function (protocol, address, key, value, callback) {
+           var message = protocol + address + ":" + key + ":" + value + "-";
+           switch (protocol) {
+               case 'l':
+               case 'z':
+               case 's':
+                   if (!Apio.Serial.hasOwnProperty("serialPort")) {
+                       console.log("The serial port is disabled, the following message cannot be sent: " + message);
+                   } else if(CCounter >= 3) {
+                       Apio.Serial.queue.push(message);
+                   }
+                   break;
+               default:
+                   if (fs.existsSync(__dirname + "/public/applications/" + data.objectId + "/adapter.js")) {
+                       var adapter = require(__dirname + "/public/applications/" + data.objectId + "/adapter.js");
+                       console.log("Protocollo " + protocol + " sconosciuto, lancio l'adapter manager, mado questo oggetto:");
+                       console.log(data);
+                       adapter.send(data);
+                       if (callback) {
+                           console.log("PARTE LA CALLBACK DELLA SERIAL");
+                           callback();
+                       }
+                   } else {
+                       Apio.Util.debug("Apio.Serial.Send() Error: protocol " + data.protocol + "is not supported and no adapter was found.");
+                   }
+                   break;
+           }
+       }
 
 
-
-                Apio.Database.db.collection('Objects').findOne({
-                    objectId: data.objectId
-                }, function(err, document) {
-                    if (err) {
-                        console.log('Apio.Serial.read Error while looking for notifications');
-                    } else {
-                        if (document.hasOwnProperty('notifications')) {
-                            for (var prop in data.properties) //prop è il nome della proprietà di cui cerco notifiche
-                                if (document.notifications.hasOwnProperty(prop)) {
-                                //Ho trovato una notifica da lanciare
-                                if (document.notifications[prop].hasOwnProperty(data.properties[prop])) {
-                                    console.log("Ho trovato una notifica per la proprietà " + prop + " e per il valore corrispondente " + data.properties[prop])
-                                    Apio.Database.getObjectById(data.objectId, function(result) {
-                                        var notifica = {
-                                            objectId: data.objectId,
-                                            objectName: result.name,
-                                            message: document.notifications[prop][data.properties[prop]],
-                                            properties: data.properties,
-                                            timestamp: new Date().getTime()
-                                        };
-                                        console.log("Mando la notifica");
-                                        Apio.System.notify(notifica);
-                                    });
-                                } //Se ha una notifica per il valore attuale
-                                else {
-                                    console.log("Ho una notifica registarata per quella property ma non per quel valore")
-                                }
+       if (typeof data === "object") {
+           console.log("DATA VALE: ", data);
+           var keys = Object.keys(data.properties);
 
 
-                            } else {
-                                console.log("L'oggetto non ha una notifica registrata per la proprietà " + prop)
-                            }
-                        }
-                    }
-                })
-                Apio.Database.db.collection('States')
-                .find({objectId : data.objectId})
-                .toArray(function(err,states){
-                    console.log("CI sono "+states.length+" stati relativi all'oggetto "+data.objectId)
-                    var sensorPropertyName = Object.keys(data.properties)[0]
-                    states.forEach(function(state){
-                        if (state.hasOwnProperty('sensors') && state.sensors.length>0){
-                            if (state.sensors.indexOf(sensorPropertyName) > -1 && state.properties[sensorPropertyName] == data.properties[sensorPropertyName]) {
+           Apio.Database.db.collection('Objects').findOne({
+               objectId: data.objectId
+           }, function (err, doc) {
+               if (err) {
+                   console.log("Error while trying to retrieve the serial address. Aborting Serial.send");
+               } else {
+                   data.address = doc.address;
+                   data.protocol = doc.protocol;
 
-                                console.log("Lo stato "+state.name+" è relativo al sensore che sta mandando notifiche ed il valore corrisponde")
-                                data.message = state.name
-                                Apio.System.notify(data);
-                            } else {
-                               console.log("Lo stato "+state.name+" NON è relativo al sensore che sta mandando notifiche")
-                            }
-                        }
-                    })
-                })
+                   var counter = 0;
+                   var numberOfKeys = keys.length;
+                   var available = true;
+                   keys.forEach(function (key) {
+                       packageMessageAndAddToQueue(data.protocol, data.address, key, data.properties[key], function (err) {
+                       })
+                   })
 
-                Apio.Database.updateProperty(data, function() {
-                    Apio.io.emit('apio_server_update', data);
+               }
+           })
+       }
+       else if (typeof data === "string") {
+           var protocolAndAddress = data.split(":");
+           protocolAndAddress = protocolAndAddress[0];
+           var dataComponents = data.split("-");
+           for (var i in dataComponents) {
+               if (dataComponents[i] !== "") {
+                   if(CCounter >= 3){
+                       if (dataComponents[i].indexOf(protocolAndAddress) > -1) {
+                           Apio.Serial.queue.push(dataComponents[i] + "-");
+                       }
+                       else {
+                           Apio.Serial.queue.push(protocolAndAddress + ":" + dataComponents[i] + "-");
+                       }
+                   }
+               }
+           }
+       }
+   }
+   /*
+    *	used when the Server Apio has received some message on the serial from
+    * 	an external Apio Object (mostly a Sensor/Button) which is trying to
+    *	update some information on the database
+    */
+   Apio.Serial.read = function (data) {
 
-                                    Apio.Database.db.collection('Objects')
-                    .findOne({
-                        objectId: data.objectId
-                    }, function(err, obj_data) {
-                        if (err || obj_data === null) {
-                            console.log("An error has occurred while trying to figure out a state name")
-                        } else {
-                            Apio.Database.db.collection('States')
-                                .find({
-                                    objectId: obj_data.objectId
-                                }).toArray(function(error, states) {
-                                    console.log("\n\n@@@@@@@@@@@@@@@@@@@")
-                                    console.log("Inizio controllo stati")
-                                    console.log("Ho " + states.length + " stati relativi all'oggetto " + obj_data.objectId);
-                                    states.forEach(function(state) {
+       //I sensori invieranno le seguenti informazioni
+       //SensorID:command:Chiave:Valore
+       //Quindi la funzione read, deve fare una query nel db per capire quale azione intraprendere
+       //Per il momento invece, in fase di testing, i sensori inviano: TargetADDR:command:chiave:valore
 
-                                        var test = true;
-                                        for (var key in state.properties)
-                                            if (state.properties[key] !== obj_data.properties[key])
-                                                test = false;
-                                        if (test === true) {
-                                            console.log("Lo stato " + state.name + " corrisponde allo stato attuale dell'oggetto")
+       if (!Apio.Serial.hasOwnProperty("serialPort"))
+           throw new Error("The Apio.Serial service has not been initialized. Please, call Apio.Serial.init() before using it.");
 
-                                                Apio.System.applyState(state.name, function(err) {
+       switch (data.command) {
+           case "send":
 
-                                                    if (err) {
-                                                        console.log("An error has occurred while applying the matched state")
-                                                    }
-                                                },true)
+               //Prendo i dati ddell"oggetto in db, scrivo in seriale e updato il db.
+               //In seriale verrà mandata una stringa del tipo
+               //objId:command:chiavivalori
+
+               //Invece di fare questa query, dovrò cercare gli eventi associati a quel sensore
+               Apio.Database.getObjectById(data.objectId, function (object) {
+                   //object contiene le informazioni aggiuntive dell'oggetto a cui inviare l'evento
+                   //tra cui l'address e il protocol
+                   data.objectId = object.objectId;
+                   data.protocol = object.protocol;
+
+                   Apio.Serial.send(data); //Mando data perchè ancora i sensori scrivono in seriale l'evento che vogliono scatenare
+                   //Poi invece manderò i dati recuperati dalla query getEventsByTrigger() o qualcosa del genere
+
+                   Apio.Database.updateProperty(data, function () {
+                       //Notificare i client connessi
+
+                       Apio.io.to("apio_client").emit("apio_server_update", data);
+                   });
+               });
+               break;
+           case "time":
+               console.log("SONO DENTRO TIME, DATA VALE: ", data);
+               var t = new Date().getTime();
+               Apio.Serial.send("l" + data.objectId + ":time:" + t + "-");
+               break;
+           case "update":
+               console.log("> Arrivato un update, mando la notifica");
+               //Prima di tutto cerco la notifica nel db
+               console.log(data);
+               //Controllo Se esiste uno stato che rispecchia lo stato attuale dell'oggetto
+
+               if (Apio.Database.db) {
+                   Apio.Database.db.collection("Objects").findOne({ objectId : data.objectId }, function(err, res){
+                       if (err) {
+                           console.log("Unable to find object with objectId "+data.objectId);
+                       } else if (res) {
+                           if(res.sensor === true || res.sensor === "true"){
+                               for (var i in data.properties){
+                                   var x = data.properties[i];
+                                   var y = res.properties[i];
+                               }
+                               console.log("x = "+x+", y = "+y);
+                               Apio.Database.db.collection("States").find({ objectId : data.objectId }).toArray(function(error, result){
+                                   if (error) {
+                                       console.log("Unable to find states of object with objectId "+data.objectId);
+                                   } else if (result){
+                                       for (var i in result) {
+                                           for (var j in result[i].properties) {
+                                               for (var p in data.properties) {
+                                                   console.log("j = "+j+", p = "+p);
+                                                   if (j === p) {
+                                                       console.log("z = "+result[i].properties[j]);
+                                                       if(Number(x)>Number(y)){
+                                                           if(Number(result[i].properties[j])<Number(x) && Number(result[i].properties[j])>Number(y)) {
+                                                               console.log("#Applico perchè sto salendo");
+                                                               Apio.Database.db.collection('Objects').findOne({
+                                                                   objectId: data.objectId
+                                                               }, function (err, document) {
+                                                                   if (err) {
+                                                                       console.log('Apio.Serial.read Error while looking for notifications');
+                                                                   } else {
+                                                                       if (document.hasOwnProperty('notifications')) {
+                                                                           for (var prop in data.properties) //prop è il nome della proprietà di cui cerco notifiche
+                                                                               if (document.notifications.hasOwnProperty(prop)) {
+                                                                                   //Ho trovato una notifica da lanciare
+                                                                                   if (document.notifications[prop].hasOwnProperty(result[i].properties[j])) {
+                                                                                       console.log("Ho trovato una notifica per la proprietà " + prop + " e per il valore corrispondente " + data.properties[prop])
+                                                                                       Apio.Database.getObjectById(data.objectId, function (result) {
+                                                                                           var notifica = {
+                                                                                               objectId: data.objectId,
+                                                                                               objectName: result.name,
+                                                                                               message: document.notifications[prop][data.properties[prop]],
+                                                                                               properties: data.properties,
+                                                                                               timestamp: new Date().getTime()
+                                                                                           };
+                                                                                           console.log("Mando la notifica");
+                                                                                           Apio.System.notify(notifica);
+                                                                                       });
+                                                                                   } //Se ha una notifica per il valore attuale
+                                                                                   else {
+                                                                                       console.log("Ho una notifica registarata per quella property ma non per quel valore")
+                                                                                   }
 
 
-                                        }
-                                    })
+                                                                               } else {
+                                                                                   console.log("L'oggetto non ha una notifica registrata per la proprietà " + prop)
+                                                                               }
+                                                                       }
+                                                                   }
+                                                               });
 
-                                    console.log("Fine controllo degli stati\n\n@@@@@@@@@@@@@@@@@@@@@@@")
-                                });
-                        }
-                    })
-                });
-                break;
+                                                               Apio.System.applyState(result[i].name);
+                                                           }
+                                                       } else {
+                                                           if(Number(result[i].properties[j])>Number(x) && Number(result[i].properties[j])<Number(y)) {
+                                                               console.log("#Applico perchè sto scendendo")
+                                                               Apio.Database.db.collection('Objects').findOne({
+                                                                   objectId: data.objectId
+                                                               }, function (err, document) {
+                                                                   if (err) {
+                                                                       console.log('Apio.Serial.read Error while looking for notifications');
+                                                                   } else {
+                                                                       if (document.hasOwnProperty('notifications')) {
+                                                                           for (var prop in data.properties) //prop è il nome della proprietà di cui cerco notifiche
+                                                                               if (document.notifications.hasOwnProperty(prop)) {
+                                                                                   //Ho trovato una notifica da lanciare
+                                                                                   if (document.notifications[prop].hasOwnProperty(result[i].properties[j])) {
+                                                                                       console.log("Ho trovato una notifica per la proprietà " + prop + " e per il valore corrispondente " + data.properties[prop])
+                                                                                       Apio.Database.getObjectById(data.objectId, function (result) {
+                                                                                           var notifica = {
+                                                                                               objectId: data.objectId,
+                                                                                               objectName: result.name,
+                                                                                               message: document.notifications[prop][data.properties[prop]],
+                                                                                               properties: data.properties,
+                                                                                               timestamp: new Date().getTime()
+                                                                                           };
+                                                                                           console.log("Mando la notifica");
+                                                                                           Apio.System.notify(notifica);
+                                                                                       });
+                                                                                   } //Se ha una notifica per il valore attuale
+                                                                                   else {
+                                                                                       console.log("Ho una notifica registarata per quella property ma non per quel valore")
+                                                                                   }
+
+
+                                                                               } else {
+                                                                                   console.log("L'oggetto non ha una notifica registrata per la proprietà " + prop)
+                                                                               }
+                                                                       }
+                                                                   }
+                                                               });
+
+                                                               Apio.System.applyState(result[i].name);
+                                                           }
+                                                       }
+                                                       /*if (Math.abs(Number(x) - Number(y)) >= Math.abs(Number(result[i].properties[j]) - Number(x))) {
+                                                        Apio.Database.db.collection('Objects').findOne({
+                                                        objectId: data.objectId
+                                                        }, function (err, document) {
+                                                        if (err) {
+                                                        console.log('Apio.Serial.read Error while looking for notifications');
+                                                        } else {
+                                                        if (document.hasOwnProperty('notifications')) {
+                                                        for (var prop in data.properties) //prop è il nome della proprietà di cui cerco notifiche
+                                                        if (document.notifications.hasOwnProperty(prop)) {
+                                                        //Ho trovato una notifica da lanciare
+                                                        if (document.notifications[prop].hasOwnProperty(result[i].properties[j])) {
+                                                        console.log("Ho trovato una notifica per la proprietà " + prop + " e per il valore corrispondente " + data.properties[prop])
+                                                        Apio.Database.getObjectById(data.objectId, function (result) {
+                                                        var notifica = {
+                                                        objectId: data.objectId,
+                                                        objectName: result.name,
+                                                        message: document.notifications[prop][data.properties[prop]],
+                                                        properties: data.properties,
+                                                        timestamp: new Date().getTime()
+                                                        };
+                                                        console.log("Mando la notifica");
+                                                        Apio.System.notify(notifica);
+                                                        });
+                                                        } //Se ha una notifica per il valore attuale
+                                                        else {
+                                                        console.log("Ho una notifica registarata per quella property ma non per quel valore")
+                                                        }
+
+
+                                                        } else {
+                                                        console.log("L'oggetto non ha una notifica registrata per la proprietà " + prop)
+                                                        }
+                                                        }
+                                                        }
+                                                        });
+
+                                                           Apio.System.applyState(result[i].name);
+                                                       }*/
+                                                   }
+                                               }
+                                           }
+                                       }
+                                   }
+                                   Apio.Database.updateProperty(data, function () {
+                                       Apio.io.emit('apio_server_update', data);
+                                     });
+
+                               });
+                           } else {
+                               Apio.Database.db.collection('Objects').findOne({
+                                   objectId: data.objectId
+                               }, function (err, document) {
+                                   if (err) {
+                                       console.log('Apio.Serial.read Error while looking for notifications');
+                                   } else {
+                                       if (document.hasOwnProperty('notifications')) {
+                                           for (var prop in data.properties) //prop è il nome della proprietà di cui cerco notifiche
+                                               if (document.notifications.hasOwnProperty(prop)) {
+                                                   //Ho trovato una notifica da lanciare
+                                                   if (document.notifications[prop].hasOwnProperty(data.properties[prop])) {
+                                                       console.log("Ho trovato una notifica per la proprietà " + prop + " e per il valore corrispondente " + data.properties[prop])
+                                                       Apio.Database.getObjectById(data.objectId, function (result) {
+                                                           var notifica = {
+                                                               objectId: data.objectId,
+                                                               objectName: result.name,
+                                                               message: document.notifications[prop][data.properties[prop]],
+                                                               properties: data.properties,
+                                                               timestamp: new Date().getTime()
+                                                           };
+                                                           console.log("Mando la notifica");
+                                                           Apio.System.notify(notifica);
+                                                       });
+                                                   } //Se ha una notifica per il valore attuale
+                                                   else {
+                                                       console.log("Ho una notifica registarata per quella property ma non per quel valore")
+                                                   }
+
+
+                                               } else {
+                                                   console.log("L'oggetto non ha una notifica registrata per la proprietà " + prop)
+                                               }
+                                       }
+                                   }
+                               });
+
+                               Apio.Database.db.collection('States')
+                                   .find({objectId: data.objectId})
+                                   .toArray(function (err, states) {
+                                       console.log("CI sono " + states.length + " stati relativi all'oggetto " + data.objectId)
+                                       var sensorPropertyName = Object.keys(data.properties)[0]
+                                       states.forEach(function (state) {
+                                           if (state.hasOwnProperty('sensors') && state.sensors.length > 0) {
+                                               if (state.sensors.indexOf(sensorPropertyName) > -1 && Number(state.properties[sensorPropertyName]) == Number(data.properties[sensorPropertyName])) {
+
+                                                   console.log("Lo stato " + state.name + " è relativo al sensore che sta mandando notifiche ed il valore corrisponde")
+                                                   data.message = state.name
+                                                   Apio.System.notify(data);
+                                               } else {
+                                                   console.log("sensorPropertyName = "+sensorPropertyName);
+                                                   console.log("state.sensors: ", state.sensors);
+                                                   console.log("state.properties: ", state.properties);
+                                                   console.log("data.properties: ", data.properties);
+                                                   console.log("Lo stato " + state.name + " NON è relativo al sensore che sta mandando notifiche")
+                                               }
+                                           }
+                                       })
+                                   })
+
+                               Apio.Database.updateProperty(data, function () {
+                                   Apio.io.emit('apio_server_update', data);
+
+                                   Apio.Database.db.collection('Objects')
+                                       .findOne({
+                                           objectId: data.objectId
+                                       }, function (err, obj_data) {
+                                           if (err || obj_data === null) {
+                                               console.log("An error has occurred while trying to figure out a state name")
+                                           } else {
+                                               Apio.Database.db.collection('States')
+                                                   .find({
+                                                       objectId: obj_data.objectId
+                                                   }).toArray(function (error, states) {
+                                                       console.log("\n\n@@@@@@@@@@@@@@@@@@@")
+                                                       console.log("Inizio controllo stati")
+                                                       console.log("Ho " + states.length + " stati relativi all'oggetto " + obj_data.objectId);
+                                                       states.forEach(function (state) {
+
+                                                           var test = true;
+                                                           for (var key in state.properties)
+                                                               if (state.properties[key] !== obj_data.properties[key])
+                                                                   test = false;
+                                                           if (test === true) {
+                                                               console.log("Lo stato " + state.name + " corrisponde allo stato attuale dell'oggetto")
+
+                                                               Apio.System.applyState(state.name, function (err) {
+
+                                                                   if (err) {
+                                                                       console.log("An error has occurred while applying the matched state")
+                                                                   }
+                                                               }, true)
+
+
+                                                           }
+                                                       })
+
+                                                       console.log("Fine controllo degli stati\n\n@@@@@@@@@@@@@@@@@@@@@@@")
+                                                   });
+                                           }
+                                       })
+                               });
+                           }
+                       }
+                   });
+               }
+               break;
+           case "request":
+               console.log("> Arrivato un update, mando la notifica");
+               //Prima di tutto cerco la notifica nel db
+               console.log(data);
+               //Controllo Se esiste uno stato che rispecchia lo stato attuale dell'oggetto
+
+               if (Apio.Database.db) {
+                   Apio.Database.db.collection('Objects').findOne({
+                       objectId: data.objectId
+                   }, function (err, document) {
+                       if (err) {
+                           console.log('Apio.Serial.read Error while looking for notifications');
+                       } else {
+                           if (document.hasOwnProperty('notifications')) {
+                               for (var prop in data.properties) //prop è il nome della proprietà di cui cerco notifiche
+                                   if (document.notifications.hasOwnProperty(prop)) {
+                                       //Ho trovato una notifica da lanciare
+                                       if (document.notifications[prop].hasOwnProperty(data.properties[prop])) {
+                                           console.log("Ho trovato una notifica per la proprietà " + prop + " e per il valore corrispondente " + data.properties[prop])
+                                           Apio.Database.getObjectById(data.objectId, function (result) {
+                                               var notifica = {
+                                                   objectId: data.objectId,
+                                                   objectName: result.name,
+                                                   message: document.notifications[prop][data.properties[prop]],
+                                                   properties: data.properties,
+                                                   timestamp: new Date().getTime()
+                                               };
+                                               console.log("Mando la notifica");
+                                               Apio.System.notify(notifica);
+                                           });
+                                       } //Se ha una notifica per il valore attuale
+                                       else {
+                                           console.log("Ho una notifica registarata per quella property ma non per quel valore")
+                                       }
+
+
+                                   } else {
+                                       console.log("L'oggetto non ha una notifica registrata per la proprietà " + prop)
+                                   }
+                           }
+                       }
+                   })
+                   Apio.Database.db.collection('States')
+                       .find({objectId: data.objectId})
+                       .toArray(function (err, states) {
+                           console.log("CI sono " + states.length + " stati relativi all'oggetto " + data.objectId)
+                           var sensorPropertyName = Object.keys(data.properties)[0]
+                           states.forEach(function (state) {
+                               if (state.hasOwnProperty('sensors') && state.sensors.length > 0) {
+                                   if (state.sensors.indexOf(sensorPropertyName) > -1 && Number(state.properties[sensorPropertyName]) == Number(data.properties[sensorPropertyName])) {
+
+                                       console.log("Lo stato " + state.name + " è relativo al sensore che sta mandando notifiche ed il valore corrisponde")
+                                       data.message = state.name
+                                       Apio.System.notify(data);
+                                   } else {
+                                       console.log("sensorPropertyName = "+sensorPropertyName);
+                                       console.log("state.sensors: ", state.sensors);
+                                       console.log("state.properties: ", state.properties);
+                                       console.log("data.properties: ", data.properties);
+                                       console.log("Lo stato " + state.name + " NON è relativo al sensore che sta mandando notifiche")
+                                   }
+                               }
+                           })
+                       })
+
+                   Apio.Database.updateProperty(data, function () {
+                       Apio.io.emit('apio_server_update', data);
+
+                       Apio.Database.db.collection('Objects')
+                           .findOne({
+                               objectId: data.objectId
+                           }, function (err, obj_data) {
+                               if (err || obj_data === null) {
+                                   console.log("An error has occurred while trying to figure out a state name")
+                               } else {
+                                   Apio.Database.db.collection('States')
+                                       .find({
+                                           objectId: obj_data.objectId
+                                       }).toArray(function (error, states) {
+                                           console.log("\n\n@@@@@@@@@@@@@@@@@@@")
+                                           console.log("Inizio controllo stati")
+                                           console.log("Ho " + states.length + " stati relativi all'oggetto " + obj_data.objectId);
+                                           states.forEach(function (state) {
+
+                                               var test = true;
+                                               for (var key in state.properties)
+                                                   if (state.properties[key] !== obj_data.properties[key])
+                                                       test = false;
+                                               if (test === true) {
+                                                   console.log("Lo stato " + state.name + " corrisponde allo stato attuale dell'oggetto")
+
+                                                   Apio.System.applyState(state.name, function (err) {
+
+                                                       if (err) {
+                                                           console.log("An error has occurred while applying the matched state")
+                                                       }
+                                                   }, true)
+
+
+                                               }
+                                           })
+
+                                           console.log("Fine controllo degli stati\n\n@@@@@@@@@@@@@@@@@@@@@@@")
+                                       });
+                               }
+                           })
+                   });
+               }
+               break;
             case "hi":
                 console.log("Ho riconosciuto la parola chiave hi");
                 console.log("L'indirizzo fisico dell'oggetto che si è appena connesso è " + data.objectId);
@@ -949,7 +1750,7 @@
                 }
         );
     }
-    Apio.System.applyState = function applyState(stateName, callback,eventTriggered) {
+    Apio.System.applyState = function (stateName, callback,eventTriggered) {
         if ("undefined" == typeof eventTriggered)
             eventTriggered = false;
         function pause(millis) {
@@ -1074,6 +1875,13 @@
                             Apio.Database.updateProperty(state, function() {
                                 stateHistory[state.name] = 1;
                                 //Connected clients are notified of the change in the database
+                                if(state.hasOwnProperty('sensors') && state.sensors.length > 0){
+                                 console.log("#Salto l aggiornamento del server perchè ho un sensors")
+
+                               }
+                               else {
+                                 Apio.io.emit("apio_server_update", state);
+                               }
                                 Apio.io.emit("apio_server_update", state);
                                 Apio.Database.db.collection("Events").find({
                                     triggerState: state.name
@@ -1119,34 +1927,32 @@
                 //console.log("arr vale:");
                 //console.log(arr);
                 var contatore = 0;
-                for (var i in arr) {
-                  //Questo fix migliora gli eventi, c'è da verificare se comunque funziona tutto come dovrebbe.
-                  if(contatore==0){
-                    contatore= contatore+1;
-
-                  }else{
-
-
-                		if (hounsensore == true && i==0){
-                			console.log("Non mando la seguente cosa in seriale perchè ho un sensore")
-                            console.log(arr[i])
-                		} else {
-                			console.log("Mando alla seriale la roba numero " + i)
-                            console.log(arr[i]);
-                            console.log('============================================')
-                    Apio.Serial.send(arr[i], function() {
-                        pause(100);
-                    });
-                		}
-                  }
-
-
+                //for (var i in arr) {
+                for (var i = 1; i < arr.length; i++) {
+                    if (hounsensore == true && i == 0) {
+                        console.log("Non mando la seguente cosa in seriale perchè ho un sensore")
+                        console.log(arr[i])
+                    } else {
+                        console.log("Mando alla seriale la roba numero " + i)
+                        console.log(arr[i]);
+                        console.log('============================================')
+                        Apio.Serial.send(arr[i], function () {
+                            serialCounter++;
+                            if (serialCounter >= 100) {
+                                Apio.Serial.close(function (err) {
+                                    console.log("ERROR WHILE CLOSING SERIAL", err);
+                                    Apio.Serial.init();
+                                });
+                            }
+                            pause(100);
+                        });
+                    }
                 }
-                if ('undefined' !== typeof callback)
+                if (callback)
                     callback(null);
                 arr = [];
             } else {
-                if ('undefined' !== typeof callback)
+                if (callback)
                     callback(null);
             }
         }, eventTriggered);
