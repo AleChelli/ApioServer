@@ -20,6 +20,7 @@
 
 
 "use strict";
+var com = require("serialport")
 var express = require("express");
 var path = require("path");
 var logger = require("morgan");
@@ -492,6 +493,8 @@ app.get('/admin', function(req, res) {
     res.sendfile('public/html/settings.html');
 })
 
+
+
 app.post('/apio/user/setCloudAccess', function(req, res) {
     var user = req.body.user;
     var flag;
@@ -935,36 +938,45 @@ app.get("/apio/state/:name",routes.states.getByName);
 
 //TODO sostituire l'oggetto 1 con un oggetto verify in maniera tale da evitare la presenza di un oggetto.
 //O guardare il discorso del pidfile.h
-app.get("/app",function(req,res){
-  console.log("Richiesta /app")
-  Apio.Database.db.collection('Users').findOne({
-         name: "verify"
-       }, function(err, doc) {
-           if (err) {
-             var sys = require('sys');
-             var exec = require('child_process').exec;
-             var child = exec("mongorestore ./data/apio -d apio");
-
-
-            } else {
-              if(doc){
-              console.log("Il database c'è faccio il dump");
-              var sys = require('sys');
-              var exec = require('child_process').exec;
-              var child = exec("mongodump --out ./data");
-
-
-
-              } else {
-            console.log("Il database non c'è faccio il restore");
-             var sys = require('sys');
-             var exec = require('child_process').exec;
-             var child = exec("mongorestore ./data/apio -d apio");
-              }
-
+app.get("/app",
+  function(req, res, n) {
+            if (req.session.hasOwnProperty('email'))
+                n();
+            else {
+                console.log("Unauthorized access redirected to login screen")
+                res.redirect('/');
             }
-     })
-    res.sendfile("public/html/app.html");
+        }, function(req, res) {
+
+          console.log("Richiesta /app")
+          Apio.Database.db.collection('Users').findOne({
+                 name: "verify"
+               }, function(err, doc) {
+                   if (err) {
+                     var sys = require('sys');
+                     var exec = require('child_process').exec;
+                     var child = exec("mongorestore ./data/apio -d apio");
+
+
+                    } else {
+                      if(doc){
+                      console.log("Il database c'è faccio il dump");
+                      var sys = require('sys');
+                      var exec = require('child_process').exec;
+                      var child = exec("mongodump --out ./data");
+
+
+
+                      } else {
+                    console.log("Il database non c'è faccio il restore");
+                     var sys = require('sys');
+                     var exec = require('child_process').exec;
+                     var child = exec("mongorestore ./data/apio -d apio");
+                      }
+
+                    }
+             })
+            res.sendfile("public/html/app.html");
 })
 
 

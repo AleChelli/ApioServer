@@ -18,8 +18,6 @@
 - visit <http://www.gnu.org/licenses/gpl2.txt>				 -
 -									 -
 -------------------------------------------------------------------------->
-
-
 <html lang="en">
     <head>
         <meta charset="utf-8">
@@ -27,11 +25,11 @@
         <link rel="shortcut icon" type="image/x-icon" href="public/apio_assets/img/favicon.ico"/>
         <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
         <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
-        <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=0.45, minimum-scale=0, maximum-scale=1">
+        <meta name="viewport" content="width=device-width, email-scalable=no, initial-scale=0.45, minimum-scale=0, maximum-scale=1">
         <meta name="apple-mobile-web-app-capable" content="yes">
         <meta name="apple-mobile-web-app-status-bar-style" content="yes" />
         <title>APIO</title>
-        
+
         <link rel="stylesheet" href="/bower_components/bootstrap/dist/css/bootstrap.min.css"/>
         <style>
         body {
@@ -74,51 +72,71 @@
         border-top-right-radius: 0;
         }
         </style>
-        
+
     </head>
     <body>
-        <div class="container" ng-app="ApioLoginApplication">
-            <form class="form-signin" role="form" ng-controller="LoginController">
+        <div class="container" ng-app="ApioLoginApplication" ng-controller="LoginController">
+            <form class="form-signin" role="form" ng-hide="showSignupForm || showBoardSelection">
                 <img src="images/Apio_Logo.png" style="display:block;width:300px;margin:0px auto;"/>
                 <h2 class="form-signin-heading">Please sign in</h2>
                 <div class="alert alert-danger" ng-show="$invalid" ng-cloak>Invalid email or password</div>
-                <label for="inputEmail" class="sr-only">Email address</label>
-                <input type="text" id="inputEmail" class="form-control" placeholder="Email address" required autofocus ng-model="user" ng-change="clearError()">
-                <label for="inputPassword" class="sr-only">Password</label>
+                <div class="form-group">
+                <label for="inputEmail">Email address</label>
+                <input type="text" id="inputEmail" class="form-control" placeholder="Email address" required autofocus ng-model="email" ng-change="clearError()">
+                </div>
+                <div class="form-group">
+                    <label for="inputPassword">Password</label>
                 <input type="password" id="inputPassword" class="form-control" placeholder="Password" required ng-model="password" ng-change="clearError()">
+                </div>
+
+
                 <div class="checkbox">
                     <label>
                         <input type="checkbox" value="remember-me"> Remember me
                     </label>
                 </div>
                 <button class="btn btn-lg btn-danger btn-block" type="button" ng-click="login()">Sign in</button>
+                <div class="form-group">
+                    <a href="#" class="link" ng-click="switchToSignup()">Need an account ?</a>
+                </div>
             </form>
-            </div> <!-- /container -->
-        </body>
-        <script src="/bower_components/angular/angular.js"></script>
-        <script type="text/javascript">
-            var app = angular.module('ApioLoginApplication',[]);
-            app.controller('LoginController',['$scope','$http',function($scope,$http){
-                $scope.clearError = function() {
-                    console.log("HEIEH")
-                    $scope.$invalid = false;
-                }
-                $scope.user = "";
-                $scope.password = "";
-                $scope.login = function() {
-                    var promise = $http.post('/apio/authenticate',{
-                        'user' : $scope.user,
-                        'password' : $scope.password
-                    });
-                    promise.success(function(data,status,headers){
-                        window.location = '/app';
-                    });
-                    promise.error(function(data,status,headers){
-                        $scope.$invalid = true;
-                    })
+            <div class="row">
+                <div class="col-xs-4 col-xs-offset-4">
+                    <form class="form" role="form" ng-show="showSignupForm">
+                        <img src="images/Apio_Logo.png" style="display:block;width:300px;margin:0px auto;"/>
+                        <h2 class="form-signin-heading">Create account</h2>
+                        <div class="alert alert-danger" ng-show="$signupError == true" ng-cloak>Invalid email or password</div>
+                        <div class="form-group">
+                            <label for="inputEmail" class="">Email address</label>
+                            <input type="text" id="signupEmail" class="form-control" placeholder="Email address" required autofocus ng-model="signupEmail" ng-change="clearError()">
+                        </div>
+                        <div class="form-group">
+                            <label for="signupPassword" class="">Password</label>
+                            <input type="password" id="signupPassword" class="form-control" placeholder="Password" required ng-model="signupPassword" ng-change="clearError()">
+                        </div>
+                        <div class="form-group">
+                            <label for="signupPassword" class="">Confirm Password</label>
+                            <input type="password" id="signupPasswordConfirm" class="form-control" placeholder="Confirm Password" required ng-model="signupPasswordConfirm" ng-change="clearError()">
+                        </div>
+                        <div class="form-group">
+                            <button class="btn btn-success btn-lg btn-block" ng-click="signup()">Sign up</button>
+                        </div>
 
-                }
+                        <div class="form-group">
+                            <a href="#" class="link" ng-click="showSignupForm = false;">Already have an account? Login!</a>
+                        </div>
+                    </form>
 
-            }])
-        </script>
-    </html>
+
+
+                </div>
+            </div>
+        </div>
+
+        </div> <!-- /container -->
+    </body>
+    <script src="/bower_components/angular/angular.js"></script>
+    <script type="text/javascript" src="javascripts/login.js">
+
+    </script>
+</html>
