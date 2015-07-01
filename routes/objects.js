@@ -19,7 +19,7 @@ module.exports = function(Apio){
                 Apio.Database.updateProperty(object, function() {
                     //Connected clients are notified of the change in the database
                     Apio.io.emit("apio_server_update", object);
-                    
+
                 });
             else
                 Apio.Util.debug("Skipping write to Database");
@@ -41,6 +41,7 @@ module.exports = function(Apio){
             })
         },
         list: function(req, res) {
+						//console.log("Richiesta")
             Apio.Object.list(function(err,data){
                 if (err)
                     res.status(500).send(err);

@@ -2042,13 +2042,13 @@
 
 
               Apio.Database.updateProperty(state, function() {
-                  Apio.Serial.send(state, function() {
+                  //Apio.Serial.send(state, function() {
 
 
-                      if (callback) {
-                          callback();
-                      }
-                  })
+                      //if (callback) {
+                          //callback();
+                      //}
+                  //})
               });
           })
           //At this point, the http response has been sent
