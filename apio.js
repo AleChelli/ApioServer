@@ -2021,55 +2021,6 @@
                   });
           })
       };
-
-      function getStateByName(stateName, callback) {
-          Apio.Database.db.collection('States')
-              .findOne({
-                  name: stateName
-              }, function(err, state) {
-                  if (err) {
-                      console.log("Error in while fetching applied state data.")
-                      console.log(error);
-                      callback(error, null)
-                  } else {
-                      callback(null, state)
-                  }
-              })
-      }
-
-
-
-      Apio.State.apply = function(stateName, callback, options) {
-          getStateByName(stateName, function(error, state) {
-
-
-              Apio.Database.updateProperty(state, function() {
-                  Apio.Serial.send(state, function() {
-
-
-                      if (callback) {
-                          callback();
-                      }
-                  })
-              });
-          })
-          //At this point, the http response has been sent
-          //but we keep looking for events to launch
-          Apio.Database.db.collection('Events')
-              .find({
-                  triggerState: stateName
-              })
-              .toArray(function(err, triggeredEvents) {
-                  if (err) {
-                      console.log("Error in applyState while fetching triggered events.")
-                  } else {
-                      triggeredEvents.forEach(function(event) {
-                          Apio.Event.launch(event.name);
-                      })
-                  }
-              })
-      }
-
       Apio.Event = {};
       Apio.Event.create = function(evt, callback) {
           Apio.Database.db.collection('Events').insert(evt, function(err, result) {
@@ -2193,6 +2144,52 @@
                   })
       }
 
+
+      function getStateByName(stateName, callback) {
+          Apio.Database.db.collection('States')
+              .findOne({
+                  name: stateName
+              }, function(err, state) {
+                  if (err) {
+                      console.log("Error in while fetching applied state data.")
+                      console.log(error);
+                      callback(error, null)
+                  } else {
+                      callback(null, state)
+                  }
+              })
+      }
+
+      Apio.State.apply = function(stateName, callback, options) {
+          getStateByName(stateName, function(error, state) {
+
+
+              Apio.Database.updateProperty(state, function() {
+                  Apio.Serial.send(state, function() {
+
+
+                      if (callback) {
+                          callback();
+                      }
+                  })
+              });
+          })
+          //At this point, the http response has been sent
+          //but we keep looking for events to launch
+          Apio.Database.db.collection('Events')
+              .find({
+                  triggerState: stateName
+              })
+              .toArray(function(err, triggeredEvents) {
+                  if (err) {
+                      console.log("Error in applyState while fetching triggered events.")
+                  } else {
+                      triggeredEvents.forEach(function(event) {
+                          Apio.Event.launch(event.name);
+                      })
+                  }
+              })
+      }
       Apio.Object = {};
       Apio.Object.list = function(callback) {
           Apio.Database.db.collection('Objects')
@@ -2279,396 +2276,268 @@
           }
           return key;
       }
+      Apio.Event.launch = function(eventName, cb) {
+          var counter = 0;
+          var loops = 1;
+          var loopCounter = 1;
 
-      Apio.System.launchEvent = function(eventName, callback) {
-        Apio.Database.db.collection('Events')
-          .find({
-            name: eventName
-          })
-          .toArray(
-            function(error, data) {
+          Apio.Database.db.collection('Events')
+              .findOne({
+                      name: eventName
+                  },
+                  function(error, event) {
 
-              if (error) {
-                console.log("launchEvent() Error while fetching event data");
-                callback(error);
-              }
-              if (data !== null) {
-
-                if (data instanceof Array) {
-                  console.log("Data è un array di " + data.length + " elementi")
-                  data.forEach(function(e, i, v) {
-                    console.log("Trovato un evento da lanciare")
-                    e.triggeredStates.forEach(function(_e, _i, _v) {
-                      console.log("Trovato stato da triggerare: " + _e);
-                      console.log(_e)
-                      Apio.System.applyState(_e.name, function(err) {
-                        //
-                      }, true)
-                    })
-                  })
-                  if (callback)
-                    callback(null);
-                } else {
-                  console.log("Data non è un array :/")
-                }
-
-              } else {
-                console.log("nON c'è alcun evento chiamato dallo stato " + triggerState)
-                callback("No events")
-              }
-            }
-          );
-      }
-      Apio.System.applyState = function(stateName, callback, eventTriggered) {
-        if ("undefined" == typeof eventTriggered)
-          eventTriggered = false;
-
-        function pause(millis) {
-          var date = new Date();
-          var curDate = null;
-          do {
-            curDate = new Date();
-          } while (curDate - date < millis);
-        }
-
-
-
-        var stateHistory = {};
-
-        var getStateByName = function(stateName, callback) {
-          Apio.Database.db.collection('States').findOne({
-            name: stateName
-          }, callback);
-        }
-
-        var arr = [];
-        var hounsensore = false;
-        var applyStateFn = function(stateName, callback, eventFlag) {
-          console.log("***********Applico lo stato " + stateName + "************");
-          if (!stateHistory.hasOwnProperty(stateName)) { //se non è nella history allora lo lancio
-            getStateByName(stateName, function(err, state) {
-              if (state.hasOwnProperty('sensors') && state.sensors.length > 0) {
-                console.log("Skipping sensor state")
-                hounsensore = true;
-              }
-              if (err) {
-                console.log("applyState unable to apply state");
-                console.log(err);
-              } else if (eventFlag) {
-                console.log("eventFlag è true, quindi setto lo stato ad active")
-                arr.push(state);
-                Apio.Database.db.collection('States').update({
-                  name: state.name
-                }, {
-                  $set: {
-                    active: true
-                  }
-                }, function(err) {
-                  if (err) {
-                    console.log("Non ho potuto settare il flag a true");
-                  } else {
-                    var s = state;
-                    s.active = true;
-                    Apio.io.emit('apio_state_update', s);
-                  }
-                });
-                console.log("Lo stato che sto per applicare è " + state.name);
-                //console.log(state);
-
-                Apio.Database.updateProperty(state, function() {
-                  stateHistory[state.name] = 1;
-                  //Connected clients are notified of the change in the database
-                  Apio.io.emit("apio_server_update", state);
-                  Apio.Database.db.collection("Events").find({
-                    triggerState: state.name
-                  }).toArray(function(err, data) {
-                    if (err) {
-                      console.log("error while fetching events");
-                      console.log(err);
-                    }
-                    console.log("Ho trovato eventi scatenati dallo stato " + state.name);
-                    console.log(data);
-                    if (callback && data.length == 0) {
-                      callback();
-                    }
-                    //data è un array di eventi
-                    data.forEach(function(ev, ind, ar) {
-                      var states = ev.triggeredStates;
-                      console.log("states vale:");
-                      console.log(states)
-                      states.forEach(function(ee, ii, vv) {
-                        console.log("Chiamo applyStateFN con eventflag=true")
-                        applyStateFn(ee.name, callback, true);
-                      })
-                    })
-                  });
-                });
-              } else {
-                if (state.active == true) {
-                  console.log("Lo stato è attivo")
-                  Apio.Database.db.collection('States').update({
-                    name: state.name
-                  }, {
-                    $set: {
-                      active: false
-                    }
-                  }, function(errOnActive) {
-                    if (errOnActive) {
-                      console.log("Impossibile settare il flag dello stato");
-                      callback(new Error('Impossibile settare il flag dello stato'))
-                    } else {
-                      var s = state;
-                      s.active = false;
-                      Apio.io.emit('apio_state_update', s);
-                    }
-                  })
-                } else {
-                  console.log("Lo stato è disattivo")
-                  arr.push(state);
-                  Apio.Database.db.collection('States').update({
-                    name: state.name
-                  }, {
-                    $set: {
-                      active: true
-                    }
-                  }, function(err) {
-                    if (err) {
-                      console.log("Non ho potuto settare il flag a true");
-                    } else {
-                      var s = state;
-                      s.active = true;
-                      Apio.io.emit('apio_state_update', s);
-                    }
-                  });
-                  console.log("Lo stato che sto per applicare è ");
-                  //console.log(state);
-                  Apio.Database.updateProperty(state, function() {
-                    stateHistory[state.name] = 1;
-                    //Connected clients are notified of the change in the database
-                    if (state.hasOwnProperty('sensors') && state.sensors.length > 0) {
-                      console.log("#Salto l aggiornamento del server perchè ho un sensors")
-
-                    } else {
-                      Apio.io.emit("apio_server_update", state);
-                    }
-                    Apio.io.emit("apio_server_update", state);
-                    Apio.Database.db.collection("Events").find({
-                      triggerState: state.name
-                    }).toArray(function(err, data) {
-                      if (err) {
-                        console.log("error while fetching events");
-                        console.log(err);
+                      if (error) {
+                          console.log("launchEvent() Error while fetching event " + eventName);
+                          callback(error);
                       }
-                      console.log("Ho trovato eventi scatenati dallo stato " + state.name);
-                      console.log(data);
-                      if (callback && data.length == 0) {
-                        callback();
+                      if (event !== null) {
+                          console.log("Ecco gli scatenati");
+                          console.log(event.triggeredStates)
+                          if (event.hasOwnProperty('loop'))
+                              loops = event.loop;
+                          var processTriggeredState = function() {
+                              var delay = 0;
+                              if (event.triggeredStates[counter].hasOwnProperty('delay'))
+                                  delay = event.triggeredStates[counter].delay;
+                              console.log("Setto il timeout dello stato " + event.triggeredStates[counter].name + " al valore " + event.triggeredStates[counter].delay)
+                              setTimeout(function() {
+
+                                  Apio.State.apply(event.triggeredStates[counter].name, function() {
+
+                                      console.log("Ho processato " + event.triggeredStates[counter].name);
+                                      counter++;
+                                      if (counter >= event.triggeredStates.length) {
+                                          counter = 0;
+                                          loopCounter++;
+                                          console.log("\nFinito il ciclo")
+                                      }
+                                      if (loopCounter > loops) {
+                                          console.log("\nFinito evento")
+                                      } else {
+                                          processTriggeredState();
+                                      }
+                                  })
+                              }, delay)
+
+                          }
+                          processTriggeredState();
+
+
+
+
                       }
-                      //data è un array di eventi
-                      data.forEach(function(ev, ind, ar) {
-                        var states = ev.triggeredStates;
-                        console.log("states vale:");
-                        console.log(states)
-                        states.forEach(function(ee, ii, vv) {
-                          console.log("Chiamo applyStateFN con eventFlag=true")
-                          applyStateFn(ee.name, callback, true);
-                        })
-                      })
-                    });
-                  });
-                }
-              }
-            })
-          } else {
-            console.log("Skipping State application because of loop.")
-          }
-        }; //End of applyStateFn
-        applyStateFn(stateName, function() {
-          console.log("applyStateFn callback")
-          if (ENVIRONMENT == "production") {
-            var pause = function(millis) {
-              var date = new Date();
-              var curDate = null;
-              do {
-                curDate = new Date();
-              } while (curDate - date < millis);
-            };
-            //console.log("arr vale:");
-            //console.log(arr);
-            var contatore = 0;
-            //for (var i in arr) {
-            for (var i = 1; i < arr.length; i++) {
-              if (hounsensore == true && i == 0) {
-                console.log("Non mando la seguente cosa in seriale perchè ho un sensore")
-                console.log(arr[i])
-              } else {
-                console.log("Mando alla seriale la roba numero " + i)
-                console.log(arr[i]);
-                console.log('============================================')
-                Apio.Serial.send(arr[i], function() {
-                  serialCounter++;
-                  if (serialCounter >= 100) {
-                    Apio.Serial.close(function(err) {
-                      console.log("ERROR WHILE CLOSING SERIAL", err);
-                      Apio.Serial.init();
-                    });
-                  }
-                  pause(100);
-                });
-              }
-            }
-            if (callback)
-              callback(null);
-            arr = [];
-          } else {
-            if (callback)
-              callback(null);
-          }
-        }, eventTriggered);
+                  })
       }
-      Apio.System.checkEvent = function(state) {
-        //Se allo stato triggerato corrisponde un evento, lancia quell'evento
-      };
+
+
 
       /*Apio.System.notify = function(notification,callback) {
-	//Notifica a tutti gli utenti di un evento
-	//Questo viene fatto inviando una notifica ai client attivi
-	console.log("Ciao, sono Apio..System.notify e mi è arrivata questa notifica")
-	notification.timestamp = (new Date()).getTime();
-	console.log(notification);
-	Apio.Database.db.collection('Users').update({},{$push : {"unread_notifications" : notification}},function(err,data){
-		if (err)
-			console.log("Apio.System.notify Error, unable to send the notification");
-		else {
-			console.log("Emitto la notifica");
-			Apio.io.emit('apio_notification',notification);
-			if (callback)
-				callback();
-		}
-	})
-
-}*/
-      Apio.System.notify = function(notification, callback) {
-        var areJSONsEqual = function(a, b) {
-          function check(a, b) {
-            for (var attr in a) {
-              if (attr !== "timestamp" && a.hasOwnProperty(attr) && b.hasOwnProperty(attr)) {
-                if (a[attr] != b[attr]) {
-                  switch (a[attr].constructor) {
-                    case Object:
-                      return areJSONsEqual(a[attr], b[attr]);
-                    case Function:
-                      if (a[attr].toString() != b[attr].toString()) {
-                        return false;
-                      }
-                      break;
-                    default:
-                      return false;
-                  }
-                }
-              } else {
-                return false;
-              }
-            }
-            return true;
+      //Notifica a tutti gli utenti di un evento
+      //Questo viene fatto inviando una notifica ai client attivi
+      console.log("Ciao, sono Apio..System.notify e mi è arrivata questa notifica")
+      notification.timestamp = (new Date()).getTime();
+      console.log(notification);
+      Apio.Database.db.collection('Users').update({},{$push : {"unread_notifications" : notification}},function(err,data){
+          if (err)
+              console.log("Apio.System.notify Error, unable to send the notification");
+          else {
+              console.log("Emitto la notifica");
+              Apio.io.emit('apio_notification',notification);
+              if (callback)
+                  callback();
           }
+      })
 
-          return check(a, b) && check(b, a);
-        };
-
-        //Notifica a tutti gli utenti di un evento
-        //Questo viene fatto inviando una notifica ai client attivi
-        console.log("Ciao, sono Apio..System.notify e mi è arrivata questa notifica")
-        notification.timestamp = (new Date()).getTime();
-        console.log(notification);
-        if (notification.properties == "online") {
-          Apio.io.emit('apio_notification', notification);
-        } else {
-          Apio.Database.db.collection("Users").find().toArray(function(err, data) {
-            if (err) {
-              console.log("Errore: " + err);
-            } else {
-              for (var i in data) {
-                var flag = false;
-                for (var j in data[i].disabled_notification) {
-                  if (typeof data[i].disabled_notification !== "undefined" && data[i].disabled_notification.length > 0 && areJSONsEqual(data[i].disabled_notification[j], notification)) {
-                    flag = true;
-                    break;
+  }*/
+      /*
+       *
+       */
+      function getStateByName(stateName, callback) {
+          Apio.Database.db.collection('States')
+              .findOne({
+                  name: stateName
+              }, function(err, state) {
+                  if (err) {
+                      console.log("Error in while fetching applied state data.")
+                      console.log(error);
+                      callback(error, null)
+                  } else {
+                      callback(null, state)
                   }
-                }
-                if (!flag) {
-                  Apio.Database.db.collection('Users').update({
-                    "email": data[i].email
-                  }, {
-                    $push: {
-                      "unread_notifications": notification
-                    }
-                  }, function(err, data) {
-                    if (err)
-                      console.log("Apio.System.notify Error, unable to send the notification");
-                    else {
-                      console.log("Emitto la notifica");
-                      Apio.io.emit('apio_notification', notification);
-                      if (callback)
-                        callback();
-                    }
-                  });
-                }
+              })
+      }
+
+      Apio.State.apply = function(stateName, callback, options) {
+          getStateByName(stateName, function(error, state) {
+
+
+              Apio.Database.updateProperty(state, function() {
+                  Apio.Serial.send(state, function() {
+
+
+                      if (callback) {
+                          callback();
+                      }
+                  })
+              });
+          })
+          //At this point, the http response has been sent
+          //but we keep looking for events to launch
+          Apio.Database.db.collection('Events')
+              .find({
+                  triggerState: stateName
+              })
+              .toArray(function(err, triggeredEvents) {
+                  if (err) {
+                      console.log("Error in applyState while fetching triggered events.")
+                  } else {
+                      triggeredEvents.forEach(function(event) {
+                          Apio.Event.launch(event.name);
+                      })
+                  }
+              })
+      }
+
+      Apio.System.notify = function(notification, callback) {
+          var areJSONsEqual = function(a, b) {
+              function check(a, b) {
+                  for (var attr in a) {
+                      if (attr !== "timestamp" && a.hasOwnProperty(attr) && b.hasOwnProperty(attr)) {
+                          if (a[attr] != b[attr]) {
+                              switch (a[attr].constructor) {
+                                  case Object:
+                                      return areJSONsEqual(a[attr], b[attr]);
+                                  case Function:
+                                      if (a[attr].toString() != b[attr].toString()) {
+                                          return false;
+                                      }
+                                      break;
+                                  default:
+                                      return false;
+                              }
+                          }
+                      } else {
+                          return false;
+                      }
+                  }
+                  return true;
               }
-            }
-          });
-        }
+
+              return check(a, b) && check(b, a);
+          };
+
+          //Notifica a tutti gli utenti di un evento
+          //Questo viene fatto inviando una notifica ai client attivi
+          console.log("Ciao, sono Apio..System.notify e mi è arrivata questa notifica")
+          notification.timestamp = (new Date()).getTime();
+          console.log(notification);
+          Apio.Remote.socket.emit('apio.server.notification', notification)
+          if (notification.properties == "online") {
+              Apio.io.emit('apio_notification', notification);
+              Apio.Remote.socket.emit('apio.server.notification', notification)
+          } else {
+              Apio.Database.db.collection("Users").find().toArray(function(err, data) {
+                  if (err) {
+                      console.log("Errore: " + err);
+                  } else {
+                      for (var i in data) {
+                          var flag = false;
+                          for (var j in data[i].disabled_notification) {
+                              if (typeof data[i].disabled_notification !== "undefined" && data[i].disabled_notification.length > 0 && areJSONsEqual(data[i].disabled_notification[j], notification)) {
+                                  flag = true;
+                                  break;
+                              }
+                          }
+                          if (true) {
+                              Apio.Database.db.collection('Users').update({
+                                  "email": data[i].email
+                              }, {
+                                  $push: {
+                                      "unread_notifications": notification
+                                  }
+                              }, function(err, data) {
+                                  if (err)
+                                      console.log("Apio.System.notify Error, unable to send the notification");
+                                  else {
+                                      console.log("Emitto la notifica");
+                                      Apio.io.emit('apio_notification', notification);
+                                      Apio.Remote.socket.emit('apio.server.notification', notification)
+                                      if (callback)
+                                          callback();
+                                  }
+                              });
+                          }
+                      }
+                  }
+              });
+          }
       };
 
       Apio.System.jobs = {};
 
       //Questa funzione deve essere chiamata alla creazione dell''evento se quell'evento è scheduled
       Apio.System.registerCronEvent = function(event) {
-        /*
-		Seconds: 0-59
-		Minutes: 0-59
-		Hours: 0-23
-		Day of Month: 1-31
-		Months: 0-11
-		Day of Week: 0-6
+          /*
+          Seconds: 0-59
+          Minutes: 0-59
+          Hours: 0-23
+          Day of Month: 1-31
+          Months: 0-11
+          Day of Week: 0-6
 
-		* * * * * *
-		00 10 16 20 *
-	*/
-        console.log("Registro evento con timer (" + event.triggerTimer + ")");
-        Apio.System.jobs[event.name] = new CronJob(event.triggerTimer,
-          function() {
-            console.log("Apio.System Executing Scheduled Event '" + event.name + "'");
-            Apio.System.launchEvent(event.name); //Lancio l'evento
-          },
-          function() {
-            console.log("Event launched on time");
-          },
-          true,
-          "Europe/Rome");
+          * * * * * *
+          00 10 16 20 *
+      */
+          console.log("Registro evento con timer (" + event.triggerTimer + ")");
+          Apio.System.jobs[event.name] = new CronJob(event.triggerTimer,
+              function() {
+                  console.log("Apio.System Executing Scheduled Event '" + event.name + "'");
+                  Apio.Event.launch(event.name); //Lancio l'evento
+              },
+              function() {
+                  console.log("Event launched on time");
+              },
+              true,
+              "Europe/Rome");
       }
       Apio.System.resumeCronEvents = function() { //FIX
           //Trova tutti gli eventi schedulati
           Apio.Database.db.collection('Events').find({
-            triggerTimer: {
-              $exists: true
-            }
+              triggerTimer: {
+                  $exists: true
+              }
           }).toArray(function(err, docs) {
 
-            docs.forEach(function(event, i, a) {
-              Apio.System.registerCronEvent(event);
-            })
+              docs.forEach(function(event, i, a) {
+                  Apio.System.registerCronEvent(event);
+              })
           })
-        }
-        //FIXME SE riavvio il processo i cron task si perdono!
-        //Devo scriverli nel db e caricarli al bootstrap dell'applicazione
-      Apio.System.deleteCronEvent = function(eventName) {
-        if (Apio.System.jobs.hasOwnProperty(eventName))
-          delete Apio.System.jobs[eventName];
-        else
-          console.log("Apio.System.deleteCronEvent: unable to delete cron event " + eventName + " : the cron event does not exist;");
       }
+      //FIXME SE riavvio il processo i cron task si perdono!
+      //Devo scriverli nel db e caricarli al bootstrap dell'applicazione
+      Apio.System.deleteCronEvent = function(eventName) {
+          if (Apio.System.jobs.hasOwnProperty(eventName))
+              delete Apio.System.jobs[eventName];
+          else
+              console.log("Apio.System.deleteCronEvent: unable to delete cron event " + eventName + " : the cron event does not exist;");
+      }
+
+      Apio.Remote = {
+          connectionRetryCounter: 0
+      };
+      Apio.Remote.initializeSocket = function() {
+
+      }
+      if (Apio.Configuration.remote.enabled === true) {
+          Apio.Remote.socket = require('socket.io-client')(Apio.Configuration.remote.uri);
+      }
+
+
+
 
       return Apio;
 
-};
+
+
+  };
