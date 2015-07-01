@@ -1308,6 +1308,10 @@
                                     states.forEach(function(state) {
 
                                       var test = true;
+                                      console.log(state.properties)
+                                      if(state.properties==undefined){
+                                        test = false;
+                                      }
                                       for (var key in state.properties)
                                         if (state.properties[key] !== obj_data.properties[key])
                                           test = false;
@@ -1419,14 +1423,20 @@
                               console.log("\n\n@@@@@@@@@@@@@@@@@@@")
                               console.log("Inizio controllo stati")
                               console.log("Ho " + states.length + " stati relativi all'oggetto " + obj_data.objectId);
+                              console.log(states);
                               states.forEach(function(state) {
 
+
                                 var test = true;
+
                                 for (var key in state.properties)
+                                  //console.log(state.properties);
                                   if (state.properties[key] !== obj_data.properties[key])
                                     test = false;
+
                                 if (test === true) {
                                   console.log("Lo stato " + state.name + " corrisponde allo stato attuale dell'oggetto")
+
 
                                   Apio.System.applyState(state.name, function(err) {
 
@@ -1439,6 +1449,7 @@
                                 }
                               })
 
+
                               console.log("Fine controllo degli stati\n\n@@@@@@@@@@@@@@@@@@@@@@@")
                             });
                         }
@@ -1448,14 +1459,14 @@
                 break;
               case "hi":
                 console.log("Ho riconosciuto la parola chiave hi");
-                console.log("L'indirizzo fisico dell'oggetto che si è appena connesso è " + data.objectId);
+                console.log("L'indirizzo fisico dell'oggetto che si è appena connesso è " + data.address);
                 Apio.Database.db.collection('Objects').findOne({
                   objectId: data.objectId
                 }, function(err, document) {
                   if (err) {
                     console.log("non esiste un oggetto con address " + data.objectId);
                   } else {
-                    console.log("l'oggetto con address " + data.objectId + " è " + document.objectId);
+                    console.log("l'oggetto con address " + document.address + " è " + document.objectId);
                     var notifica = {
                       objectId: document.objectId,
                       objectName: document.name,
@@ -1476,8 +1487,8 @@
                           body: {
                             state: {
                               active: false,
-                              name: "Connected: " + document.objectName,
-                              objectName: document.objectName,
+                              name: "Connected: " + document.name,
+                              objectName: document.name,
                               objectId: document.objectId
                             }
                           }
@@ -1497,7 +1508,7 @@
 
                       } else {
                         var o = {};
-                        o.name = "Connected" + document.objectId;
+                        o.name = "Connected: " + document.name;
                         var req_data = {
                           json: true,
                           uri: "http://localhost:8083/apio/state/apply",
