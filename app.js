@@ -20,16 +20,14 @@
 
 
 "use strict";
-var com = require("serialport");
 var express = require("express");
-var mongoSession = require('express-session-mongo');
 var path = require("path");
 var logger = require("morgan");
-var cookieParser = require("cookie-parser");
+//var cookieParser = require("cookie-parser");
+var mongoSession = require('express-session-mongo');
 var bodyParser = require("body-parser");
 var http = require("http");
 var app = express();
-var Apio = require("./apio.js");
 var fs = require('fs');
 var domain = require('domain');
 var async = require('async');
@@ -37,8 +35,10 @@ var request = require('request');
 var net = require('net');
 var targz = require('tar.gz');
 var formidable = require('formidable');
-var session = require('express-session');
-var util = require('util');
+var crypto = require('crypto');
+var MongoClient = require("mongodb").MongoClient;
+var util = require('util')
+var session = require('express-session')
 
 var configuration = {};
 
@@ -447,7 +447,7 @@ Apio.Database.connect(function(){
     */
 
     Apio.System.resumeCronEvents(); //Ricarica dal db tutti i cron events
-    //setupRemoteConnection();
+    setupRemoteConnection();
 });
 
 // view engine setup
@@ -1316,7 +1316,7 @@ Apio.io.on("connection", function(socket){
 
         socket.on("apio_client_update", function(data){
             Apio.Object.update(data,function(){
-                Apio.Remote.socket.emit('apio.server.object.update',data)
+                //Apio.Remote.socket.emit('apio.server.object.update',data)
             })
         });
 

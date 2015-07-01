@@ -1,16 +1,14 @@
 var request = require('request');
-var http = require('http');
 
-http.globalAgent.maxSockets = Infinity ;
 var o = {}
 o.name;
 var i = 0
 setInterval(function(){
   if(i==0) {
-    o.name = "OffInt";
+    o.name = "Off";
     i=1;
   } else {
-    o.name = "OnInt"
+    o.name = "On"
     i=0;
   }
   var req_data = {
@@ -24,6 +22,9 @@ setInterval(function(){
     }
   }
   var req = request(req_data, function(error, response, body) {
+    console.log(error);
+    console.log(response);
+    console.log(body);
 
 
   })

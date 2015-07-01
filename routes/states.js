@@ -9,14 +9,13 @@ module.exports = function(Apio){
 
         },
         create: function(req, res) {
-					console.log("Richiesta");
 
-            /*Apio.State.create(req.body.state, req.body.event, function(response) {
+            Apio.State.create(req.body.state, req.body.event, function(response) {
                 var state = req.body.state;
                 state.apioId = Apio.System.getApioIdentifier();
                 Apio.Remote.socket.emit("apio.server.state.create", state);
                 res.send(response);
-            })*/
+            })
         },
         delete: function(req, res) {
             Apio.State.delete(req.params.name, function(response) {
@@ -28,13 +27,13 @@ module.exports = function(Apio){
 
         },
         apply: function(req, res) {
-					console.log("Richiesta");
-            /*Apio.State.apply(req.body.state.name,function(){
+						var name = req.body.state.name;
+            Apio.State.apply(name,function(){
 
                 Apio.Util.log("HTTP requested to apply state "+req.body.state.name)
-                Apio.Remote.socket.emit('apio.server.state.apply',{stateName : req.body.state.name});
-                res.send(200);
-            });*/
+                //Apio.Remote.socket.emit('apio.server.state.apply',{stateName : req.body.state.name});
+                res.send();
+            });
 
         },
         getByName: function(req, res) {
