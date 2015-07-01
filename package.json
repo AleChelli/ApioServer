@@ -24,7 +24,12 @@
     "request": "~2.51.0",
     "git-clone": "0.0.4",
     "mqtt": "^1.2.0",
-    "mosca": "^0.30.0"
+    "mosca": "^0.30.0",
+    "node-uuid": "^1.4.3",
+    "express-mongo-session": "^1.0.2",
+    "express-session-mongo": "^0.1.0",
+    "express-session": "^1.11.3",
+    "util": "^0.10.3"
   },
   "devDependencies": {
     "frisby": "^0.8.3"

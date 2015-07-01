@@ -24,7 +24,12 @@
  *	jshint strict: true
  *
  */
-(function() {
+ //apio.js
+ /*
+  *  jshint strict: true
+  *
+  */
+ module.exports = function(config) {
     "use strict";
     /*
 	@module Apio
@@ -43,17 +48,9 @@
     var mosca = require('mosca');
     var request = require('request');
     var async = require('async')
-
-    var APIO_CONFIGURATION = {
-      port: 8083
-    }
-    var ENVIRONMENT = "production";
-    if (process.argv.indexOf('--no-serial') > -1)
-      ENVIRONMENT = "development"
-    if (process.argv.indexOf('--http-port') > -1) {
-      var index = process.argv.indexOf('--http-port');
-      APIO_CONFIGURATION.port = process.argv[index + 1];
-    }
+    Apio.Configuration = config;
+    /* Set to false to disable debugging messages */
+    Apio.DEBUG = true;
 
 
 
@@ -105,6 +102,9 @@
 
       return string;
     };
+    Apio.Util.log = function(str) {
+        console.log('[' + (new Date()) + '] ApioOS >>> ' + str);
+    }
     /*
      *	Convert a string written in the Codifica Apio into a JSON object  and return it
      */
@@ -225,12 +225,14 @@
     //FIXME wrappa completamente l"oogetto serialPort
     var ApioSerialRefresh = false;
     var checkDongleRecive = "c";
+
+
     Apio.Serial = {};
-    Apio.Serial.Configuration = {};
+    //Apio.Configuration.serial = {};
     if (process.argv.indexOf('--serial-port') > -1) {
         var index = process.argv.indexOf('--serial-port');
-        Apio.Serial.Configuration.port = process.argv[index+1];
-        console.log(Apio.Serial.Configuration.port)
+        Apio.Configuration.serial.port = process.argv[index+1];
+        //console.log(Apio.Configuration.serial.port)
     }
 
     Apio.Serial.Error = function(message) {
@@ -242,12 +244,6 @@
      */
     Apio.Serial.Error.prototype = Object.create(Error.prototype);
     Apio.Serial.Error.prototype.name = "Apio.Serial.Error";
-
-
-    Apio.Serial.Configuration = {
-      port: Apio.Serial.Configuration.port,
-      baudrate: 115200
-    }
     /*
      *	 Initializes the serial port service if it isn"t initialized
      */
@@ -255,21 +251,22 @@
 
       if (!Apio.Serial.hasOwnProperty("serialPort")) {
 
+
         //FIXME sarebbe meglio incapsulare serialPort e nasconderla dall"esterno.
 
-        Apio.Serial.serialPort = new com.SerialPort(Apio.Serial.Configuration.port, {
-          baudrate: Apio.Serial.Configuration.baudrate,
+        Apio.Serial.serialPort = new com.SerialPort(Apio.Configuration.serial.port, {
+          baudrate: Apio.Configuration.serial.baudrate,
           parser: com.parsers.readline("\r\n")
         });
         Apio.Serial.serialPort.on("error", function(err) {
           console.log("SERIAL PORT ERROR (0): ", err);
         });
         Apio.Serial.serialPort.on("open", function() {
-            Apio.Util.debug("Apio.Serial.init() port is now open and listening on " + Apio.Serial.Configuration.port);
+            Apio.Util.debug("Apio.Serial.init() port is now open and listening on " + Apio.Configuration.serial.port);
             var d = new Date(),
               ms = d.getMilliseconds();
                 //Correct
-                fs.appendFile(__dirname + '/log.txt', d + ", " + ms + ": Apio.Serial.init() port is now open and listening on " + Apio.Serial.Configuration.port + ", Apio.Serial.serialFlag = " + Apio.Serial.serialFlag + "\n", function(err) {
+                fs.appendFile(__dirname + '/log.txt', d + ", " + ms + ": Apio.Serial.init() port is now open and listening on " + Apio.Configuration.serial.port + ", Apio.Serial.serialFlag = " + Apio.Serial.serialFlag + "\n", function(err) {
                   if (err) {
                     console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
                   }
@@ -306,7 +303,7 @@
                       Apio.Serial.read(dataObject);
                     else {
                       //TODO ADD ACTUAL ERROR MANAGEMENT
-                      Apio.Util.debug("APIO::SERIAL::DATA:IGNORED String is not well formed");
+                      //Apio.Util.debug("APIO::SERIAL::DATA:IGNORED String is not well formed");
                     }
                   } else {
                     if (!isNaN(tokens[0]) && !isNaN(tokens[1])) {
@@ -321,9 +318,9 @@
                         }
                       });
                     } else {
-                      Apio.Util.debug("APIO::SERIAL::DATA:IGNORED String is too short ");
+                      //Apio.Util.debug("APIO::SERIAL::DATA:IGNORED String is too short ");
                     }
-                    Apio.Util.debug("APIO::SERIAL::DATA:IGNORED String is too short ");
+                    //Apio.Util.debug("APIO::SERIAL::DATA:IGNORED String is too short ");
                   }
                   //Se arriva un evento da seriale non devo subito spararlo ai client, devo prima processarlo
                   //Come in receiveSerialData.php
@@ -440,9 +437,9 @@
 
 
               if (String(port.manufacturer) === "Apio Dongle") {
-                console.log(port.comName);
-                console.log(Apio.Serial.Configuration.port)
-                Apio.Serial.Configuration.port= port.comName;
+                //console.log(port.comName);
+                //console.log(Apio.Configuration.serial.port)
+                Apio.Configuration.serial.port= port.comName;
                 ApioDongleDisconnect = false;
                 trovato = 1;
                 //break;
@@ -488,14 +485,14 @@
               ports.forEach(function (port) {
               console.log(port);
               if(String(port.manufacturer) === "Apio Dongle"){
-                Apio.Serial.Configuration.port = String(port.comName);
+                Apio.Configuration.serial.port = String(port.comName);
                 //Apio.Serial.init();
               }
             });
             }
           });*/
-          Apio.Serial.serialPort = new com.SerialPort(Apio.Serial.Configuration.port, {
-            baudrate: Apio.Serial.Configuration.baudrate,
+          Apio.Serial.serialPort = new com.SerialPort(Apio.Configuration.serial.port, {
+            baudrate: Apio.Configuration.serial.baudrate,
             parser: com.parsers.readline("\r\n")
           });
 
@@ -538,10 +535,10 @@
           Apio.Serial.serialPort.on("open", function() {
             Apio.Serial.serialFlag = true;
             ApioSerialIsOpen = true;
-            Apio.Util.debug("Apio.Serial.init() port is now open and listening on " + Apio.Serial.Configuration.port);
+            Apio.Util.debug("Apio.Serial.init() port is now open and listening on " + Apio.Configuration.serial.port);
             var d = new Date(),
               ms = d.getMilliseconds();
-            fs.appendFile(__dirname + '/log.txt', d + ", " + ms + ": Apio.Serial.init() port is now open and listening on " + Apio.Serial.Configuration.port + ", Apio.Serial.serialFlag = " + Apio.Serial.serialFlag + "\n", function(err) {
+            fs.appendFile(__dirname + '/log.txt', d + ", " + ms + ": Apio.Serial.init() port is now open and listening on " + Apio.Configuration.serial.port + ", Apio.Serial.serialFlag = " + Apio.Serial.serialFlag + "\n", function(err) {
               if (err) {
                 console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
               }
@@ -587,7 +584,7 @@
                     }
                   });
                 } else {
-                  Apio.Util.debug("APIO::SERIAL::DATA:IGNORED String is too short ");
+                  //Apio.Util.debug("APIO::SERIAL::DATA:IGNORED String is too short ");
                 }
               }
               //Se arriva un evento da seriale non devo subito spararlo ai client, devo prima processarlo
@@ -631,8 +628,8 @@
                 }
               });
 
-              Apio.Serial.serialPort = new com.SerialPort(Apio.Serial.Configuration.port, {
-                baudrate: Apio.Serial.Configuration.baudrate,
+              Apio.Serial.serialPort = new com.SerialPort(Apio.Configuration.serial.port, {
+                baudrate: Apio.Configuration.serial.baudrate,
                 parser: com.parsers.readline("\r\n")
               });
 
@@ -674,10 +671,10 @@
 
               Apio.Serial.serialPort.on("open", function() {
                 Apio.Serial.serialFlag = true;
-                Apio.Util.debug("Apio.Serial.init() port is now open and listening on " + Apio.Serial.Configuration.port);
+                Apio.Util.debug("Apio.Serial.init() port is now open and listening on " + Apio.Configuration.serial.port);
                 var d = new Date(),
                   ms = d.getMilliseconds();
-                fs.appendFile(__dirname + '/log.txt', d + ", " + ms + ": Apio.Serial.init() port is now open and listening on " + Apio.Serial.Configuration.port + ", Apio.Serial.serialFlag = " + Apio.Serial.serialFlag + "\n", function(err) {
+                fs.appendFile(__dirname + '/log.txt', d + ", " + ms + ": Apio.Serial.init() port is now open and listening on " + Apio.Configuration.serial.port + ", Apio.Serial.serialFlag = " + Apio.Serial.serialFlag + "\n", function(err) {
                   if (err) {
                     console.log("ERROR WHILE APPENDING ON FILE LOG.TXT");
                   }
@@ -718,7 +715,7 @@
                         }
                       });
                     } else {
-                      Apio.Util.debug("APIO::SERIAL::DATA:IGNORED String is too short ");
+                      //Apio.Util.debug("APIO::SERIAL::DATA:IGNORED String is too short ");
                     }
                   }
                 });
@@ -1562,48 +1559,87 @@
 
 
       /*
-       *	Apio Database service
+       *  Apio Database service
        */
       Apio.Database = {};
       //La connessione non viene Tenuta sempre aperta per questioni di stabilità.
       //Questa scelta può essere rivista in caso di necessità di migliori performance
       //TODO carica dati da un file di configurazione, insieme ai dati della seriale ecc..
-      Apio.Database.Configuration = {
-        hostname: "127.0.0.1",
-        database: "apio",
-        port: "27017"
-      };
       /*
        * Take the configuration file of MongoDB and
        * return a string which can be used for the
        * connection to the DB
        */
       Apio.Database.getConnectionString = function() {
-        var c = Apio.Database.Configuration;
-        return "mongodb://" + c.hostname + ":" + c.port + "/" + c.database;
+          var c = Apio.Configuration.database;
+          return "mongodb://" + c.hostname + ":" + c.port + "/" + c.database;
       };
       /*
-	Returns the default database instance
-*/
+      Returns the default database instance
+      */
       Apio.Database.getDatabaseInstance = function() {
-        return Apio.Database.db;
+          return Apio.Database.db;
       }
 
       Apio.Database.connect = function(callback) {
-        MongoClient.connect(Apio.Database.getConnectionString(), function(error, db) {
-          if (error) {
-            Apio.Util.debug("Apio.Database.connect() encountered an error while trying to connect to the database");
-            return;
-          }
-          console.log("Apio.Database.connect() created a new connection to MongoDB");
-          Apio.Database.db = db;
-          if (callback)
-            callback();
-        })
+          MongoClient.connect(Apio.Database.getConnectionString(), function(error, db) {
+              if (error) {
+                  console.log(error)
+                  Apio.Util.debug("Apio.Database.connect() encountered an error while trying to connect to the database");
+                  return;
+              }
+              console.log("Apio.Database.connect() created a new connection to MongoDB");
+              Apio.Database.db = db;
+              /*Apio.Database.db.stats(function(err, stats){
+                  if(err){
+                      console.log("+++++++++++++++ERROR+++++++++++++++");
+                      console.log(err);
+                  }
+                  //else if(parseInt(stats.storageSize)/1024/1024 >= 100){
+                  else if(stats.storageSize){
+                      console.log("DB reached to maximum size, sending logs to cloud");
+                      Apio.Database.db.collection("Objects").find().toArray(function(error, objs) {
+                          if(error){
+                              console.log("Unable to execute query in collection Objects");
+                          }
+                          else if(objs){
+                              for(var i in objs){
+                                  if(objs[i].log){
+                                      var send = {
+                                          command : "update",
+                                          log : objs[i].log,
+                                          objectId : objs[i].objectId
+                                      };
+                                      Apio.Remote.socket.emit('apio.server.object.update', send);
+                                      Apio.Database.db.collection("Objects").update({ objectId : objs[i].objectId }, { $set : { log : {} } }, function(error_, result){
+                                          if(error_){
+                                              console.log("Unable to update object with objectId "+objs[i].objectId);
+                                          }
+                                          else if(result){
+                                              Apio.Database.db.command({ compact: 'Objects', paddingFactor: 1 }, function(err_, result_){
+                                                  if(err_){
+                                                      console.log("Unable to compact collection Objects");
+                                                  }
+                                                  else if(result_){
+                                                      console.log("Return is:");
+                                                      console.log(result);
+                                                  }
+                                              });
+                                          }
+                                      });
+                                  }
+                              }
+                          }
+                      });
+                  }
+              });*/
+              if (callback)
+                  callback();
+          })
       };
 
       Apio.Database.disconnect = function() {
-        Apio.Database.db.close();
+          Apio.Database.db.close();
       }
 
       /**
@@ -1774,8 +1810,337 @@
 
       };
 
+      Apio.State = {};
+
+      Apio.State.create = function(newState, eventToCreate, callback) {
+
+          Apio.Database.db.collection('States').findOne({
+              name: newState.name
+          }, function(err, data) {
+              if (data) {
+                  console.log("Esiste già uno stato con questo nome (" + newState.name + ")")
+                  callback({
+                      error: "STATE_NAME_EXISTS"
+                  });
+              } else {
+                  console.log("objectId vale:");
+                  console.log(newState.objectId);
+                  console.log("properties vale:");
+                  console.log(newState.properties);
+                  //Apio.Database.db.collection('States').aggregate({$match : {objectId : newState.objectId, properties: newState.properties}},function(err,result){
+                  Apio.Database.db.collection('States').findOne({
+                      objectId: newState.objectId,
+                      properties: newState.properties
+                  }, function(err, result) {
+                      console.log("result vale:");
+                      console.log(result);
+                      if (result !== null) {
+                          console.log("Esiste già uno stato con queste proprietà");
+
+                          callback({
+                              error: 'STATE_PROPERTIES_EXIST',
+                              state: result.name
+                          });
+                      } else {
+                          if (eventToCreate) {
+                              //se sono qui devo anchr creare un evento che ha come stato scatenante lo stato inviato
+                              var evt = {
+                                  name: eventToCreate.name,
+                                  triggerState: newState.name,
+                                  type: 'stateTriggered'
+                              };
+                              Apio.Database.db.collection('Events').findOne({
+                                  name: evt.name
+                              }, function(err, data) {
+                                  if (err) {
+                                      callback({
+                                          error: true
+                                      })
+                                      console.log('/apio/state error while checking event name availability');
+                                  }
+                                  if (data) {
+                                      //Significa che ho già un evento con questo nome
+                                      callback({
+                                          error: 'EVENT_NAME_EXISTS'
+                                      });
+                                  } else {
+                                      //Se sono qui significa che non c'è un evento con quel nome.
+                                      Apio.Database.db.collection('States').insert(newState, function(err, data) {
+                                          if (!err) {
+                                              console.log("Stato (" + newState.name + ") salvato con successo")
+                                              Apio.io.emit("apio_state_new", newState);
+
+                                              Apio.Database.db.collection('Events').insert(evt, function(error) {
+                                                  if (!error) {
+                                                      Apio.io.emit("apio_event_new", evt);
+
+                                                      console.log("Evento (" + evt.name + ") relativo allo stato (" + newState.name + "), salvato con successo")
+                                                      callback({
+                                                          error: false
+                                                      })
+                                                  }
+
+                                              });
+                                          } else {
+                                              console.log("Apio.Database.Error unable to save the new state");
+                                              callback({
+                                                  error: 'DATABASE_ERROR'
+                                              });
+                                          }
+                                      })
+                                  }
+                              })
+                          } else {
+                              //Se non devo salvare eventi
+                              Apio.Database.db.collection('States').insert(newState, function(err, data) {
+                                  if (!err) {
+                                      console.log("Stato (" + newState.name + ") salvato con successo")
+                                      Apio.io.emit("apio_state_new", newState);
+
+                                      callback({
+                                          error: false
+                                      })
+                                  } else {
+                                      console.log("Apio.Database.Error unable to save the new state");
+                                      callback({
+                                          error: 'DATABASE_ERROR'
+                                      });
+                                  }
+                              })
+                          }
+
+
+                      }
+                  }) //states aggregate
+              }
+
+          })
+      }
+      Apio.State.list = function(callback) {
+          Apio.Database.db.collection("States")
+              .find()
+              .toArray(function(err, data) {
+                  if (err)
+                      callback(err, null)
+                  else
+                      callback(null, data);
+              });
+      };
+      Apio.State.getByName = function(stateName, callback) {
+          Apio.Database.db.collection("States").findOne({
+              name: stateName
+          }, function(err, data) {
+              if (err)
+                  callback(err, null);
+              else
+                  callback(null, data);
+          });
+      }
+      Apio.State.delete = function(stateToDelete, callback) {
+          Apio.Util.log("Requested deletion of state " + stateToDelete)
+          Apio.Database.db.collection("States").findAndRemove({
+              name: stateToDelete
+          }, function(err, removedState) {
+              if (!err) {
+                  Apio.io.emit("apio_state_delete", {
+                      name: stateToDelete
+                  });
+
+
+                  Apio.Database.db.collection("Events").remove({
+                      triggerState: stateToDelete
+                  }, function(err) {
+                      if (err) {
+                          callback({
+                              error: 'DATABASE_ERROR'
+                          });
+                      } else {
+                          Apio.io.emit("apio_event_delete", {
+                              name: stateToDelete
+                          });
+
+                      }
+                  });
+                  if (removedState.hasOwnProperty('sensors')) {
+
+                      removedState.sensors.forEach(function(e, i, a) {
+                          var props = {};
+                          props[e] = removedState.properties[e];
+                          Apio.Serial.send({
+                              'objectId': removedState.objectId,
+                              'properties': props
+                          })
+
+                      })
+
+
+                  }
+
+                  callback({
+                      error: false
+                  });
+              } else {
+                  Apio.Util.log("An error has occurred while removing a state")
+                  console.log(err)
+                  callback({
+                      error: 'DATABASE_ERROR'
+                  });
+              }
+
+          })
+      };
+      Apio.State.update = function(stateName, update, callback) {
+
+
+          var packagedUpdate = {
+              properties: {}
+          };
+          for (var k in update) {
+              packagedUpdate.properties[k] = update[k];
+          }
+
+          Apio.Database.db.collection("States").update({
+              name: stateName
+          }, {
+              $set: packagedUpdate
+          }, function(err) {
+              if (!err) {
+                  Apio.io.emit("apio_state_update", {
+                      name: stateName,
+                      properties: update
+                  });
+
+                  callback({
+                      error: false
+                  });
+              } else
+                  callback({
+                      error: 'DATABASE_ERROR'
+                  });
+          })
+      };
+
+      Apio.Event = {};
+      Apio.Event.create = function(evt, callback) {
+          Apio.Database.db.collection('Events').insert(evt, function(err, result) {
+              if (err) {
+                  console.log("Error while creating a new event");
+                  callback(err, null);
+              } else {
+                  if (evt.hasOwnProperty('triggerTimer')) {
+                      Apio.System.registerCronEvent(evt);
+                  }
+                  Apio.io.emit("apio_event_new", evt);
+
+
+                  callback(null, result[0].objectId);
+              }
+          })
+      };
+      Apio.Event.list = function(callback) {
+          Apio.Database.db.collection("Events").find({}).toArray(function(err, result) {
+              if (err)
+                  callback(err, null)
+              else
+                  callback(null, result)
+          });
+      };
+      Apio.Event.getByName = function(stateName, callback) {
+          Apio.Database.db.collection('Events').findOne({
+              name: stateName
+          }, function(err, data) {
+              if (err) {
+                  console.log("Error while fetching event named " + stateName);
+                  callback(err, null);
+              } else {
+                  callback(null, data);
+              }
+          })
+      }
+      Apio.Event.delete = function(eventName, callback) {
+          Apio.Database.db.collection("Events").remove({
+              name: eventName
+          }, function(err) {
+              if (!err) {
+                  Apio.io.emit("apio_event_delete", {
+                      name: eventName
+                  });
+                  callback(null);
+              } else
+                  callback(err);
+          })
+      };
+      Apio.Event.update = function(eventName, eventUpdate, callback) {
+          delete eventUpdate["_id"];
+          Apio.Database.db.collection("Events").update({
+              name: eventName
+          }, eventUpdate, function(err) {
+              if (!err) {
+                  Apio.io.emit("apio_event_update", {
+                      event: eventUpdate
+                  });
+                  callback(null, {
+                      error: false
+                  });
+              } else
+                  callback(err, {
+                      error: 'DATABASE_ERROR'
+                  });
+          })
+      };
+
+      Apio.Object = {};
+      Apio.Object.list = function(callback) {
+          Apio.Database.db.collection('Objects')
+              .find()
+              .toArray(function(err, data) {
+                  if (err)
+                      callback(err, null)
+                  else
+                      callback(null, data)
+              });
+      }
+
+
+      //Questo è il server remoto.
+      Apio.Object.update = function(data, callback) {
+          var socket = Apio.io
+          Apio.Logger.log({
+                  source : 'ApioOS',
+                  event : 'update',
+                  value : data
+              })
+          if (data.writeToDatabase === true) {
+              Apio.Database.updateProperty(data, function() {
+                  //Connected clients are notified of the change in the database
+                  socket.emit("apio_server_update", data);
+                  //socket.broadcast.emit("apio.object.update", data);
+                  if (data.writeToSerial === true && Apio.Configuration.serial.enabled == true) {
+                      Apio.Serial.send(data, function() {
+                          callback(); //si serial si update
+                      });
+                  } else {
+                      callback(); //no serial si update
+                  }
+              });
+          } else {
+              if (data.writeToSerial === true && Apio.Configuration.serial.enabled == true) {
+                  Apio.Serial.send(data, function() {
+                      callback(); //solo serial
+                  });
+              } else {
+                  callback(); //no serial no update
+              }
+          }
+      }
+
 
       Apio.System = {};
+
+      Apio.System = {
+          ApioIdentifier: null
+      };
+      
       Apio.System.launchEvent = function(eventName, callback) {
         Apio.Database.db.collection('Events')
           .find({
@@ -2165,48 +2530,6 @@
           console.log("Apio.System.deleteCronEvent: unable to delete cron event " + eventName + " : the cron event does not exist;");
       }
 
+      return Apio;
 
-
-
-      /*
-*
--rwxrwxrwx 1 pi pi   372 set 17 15:49 ApioDynamicProperty.php
--rwxrwxrwx 1 pi pi 23681 set 17 15:49 ApioProperty.php
--rwxrwxrwx 1 pi pi 19116 set 17 15:49 ApioSystemProperty.php
--rwxrwxrwx 1 pi pi  2849 set 17 15:49 Button.php
--rwxrwxrwx 1 pi pi  1102 set 17 15:49 crontab1.php
--rwxrwxrwx 1 pi pi  2809 set 17 15:49 DynamicButton.php
--rwxrwxrwx 1 pi pi  3345 set 17 15:49 DynamicMultiple.php
--rwxrwxrwx 1 pi pi  2989 set 17 15:49 DynamicView.php
--rwxrwxrwx 1 pi pi  2983 set 17 15:49 Label.php
--rwxrwxrwx 1 pi pi  6475 set 17 15:49 MySQLTable.php
--rwxrwxrwx 1 pi pi  2385 set 17 15:49 Number.php
-drwxrwxrwx 2 pi pi  4096 set 17 15:49 service
--rwxrwxrwx 1 pi pi  3727 set 17 15:49 Slider.php
-drwxrwxrwx 2 pi pi  4096 set 17 15:49 system
--rwxrwxrwx 1 pi pi  2867 set 17 15:49 SystemButton.php
--rwxrwxrwx 1 pi pi  2815 set 17 15:49 SystemDynamicButton.php
--rwxrwxrwx 1 pi pi  3421 set 17 15:49 SystemDynamicMultiple.php
--rwxrwxrwx 1 pi pi  2995 set 17 15:49 SystemDynamicView.php
--rwxrwxrwx 1 pi pi  3001 set 17 15:49 SystemLabel.php
--rwxrwxrwx 1 pi pi  2403 set 17 15:49 SystemNumber.php
--rwxrwxrwx 1 pi pi  3745 set 17 15:49 SystemSlider.php
--rwxrwxrwx 1 pi pi  2383 set 17 15:49 SystemText.php
--rwxrwxrwx 1 pi pi  3124 set 17 15:49 SystemTrigger.php
--rwxrwxrwx 1 pi pi  2365 set 17 15:49 Text.php
--rwxrwxrwx 1 pi pi  3106 set 17 15:49 Trigger.php
-*/
-
-
-
-
-      /** Module Pattern Implementation **/
-      module.exports = Apio;
-
-
-
-
-
-
-
-    })();
+};

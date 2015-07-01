@@ -22,6 +22,7 @@
 "use strict";
 var com = require("serialport");
 var express = require("express");
+var mongoSession = require('express-session-mongo');
 var path = require("path");
 var logger = require("morgan");
 var cookieParser = require("cookie-parser");
@@ -36,8 +37,314 @@ var request = require('request');
 var net = require('net');
 var targz = require('tar.gz');
 var formidable = require('formidable');
+var session = require('express-session');
+var util = require('util');
 
-var APIO_CONFIGURATION = {
+var configuration = {};
+
+if (process.argv.indexOf('--config') > -1)
+    configuration = require(process.argv[process.argv.indexOf('--config') + 1]);
+else
+    configuration = require('./configuration/default.js');
+
+if (process.argv.indexOf('--use-remote') > -1) {
+    configuration.remote.enabled = true;
+    configuration.remote.uri = process.argv[process.argv.indexOf('--use-remote') + 1]
+}
+if (process.argv.indexOf('--no-serial') > -1)
+    configuration.serial.enabled = false;
+
+if (process.argv.indexOf('--http-port') > -1) {
+    var index = process.argv.indexOf('--http-port');
+    configuration.http.port = process.argv[index + 1];
+}
+if (process.argv.indexOf('--serial-port') > -1) {
+    var index = process.argv.indexOf('--serial-port');
+    configuration.serial.port = process.argv[index + 1];
+}
+
+var Apio = require("./apio.js")(configuration);
+
+var setupRemoteConnection = function() {
+    if (configuration.remote.enabled) {
+        Apio.Util.log("Setting up remote connection to "+configuration.remote.uri)
+        var socket_cloud = require('socket.io-client')(configuration.remote.uri);
+        Apio.Remote.Socket = socket_cloud;
+        socket_cloud.on('error', function() {
+            console.log("This apio instance cloudnt connect to remote host: " + configuration.remote.uri)
+
+        })
+
+
+        socket_cloud.on('connect', function() {
+            //Devo notificare il cloud che sono online
+            console.log("Sending the handshake to the cloud (" + configuration.remote.uri + "). My id is "+Apio.System.getApioIdentifier());
+            socket_cloud.emit('apio.server.handshake', {
+                apioId: Apio.System.getApioIdentifier()
+            })
+        })
+        socket_cloud.on('apio.remote.handshake.test',function(data){
+            Apio.Util.log("Received test from ApioCloud")
+            var factor = data.factor;
+            var test = crypto
+                            .createHash('sha256')
+                            .update(factor+":"+Apio.System.getApioSecret())
+                            .digest('base64');
+            Apio.Util.log("Sending the test answer to the remote");
+            Apio.Remote.Socket.emit('apio.server.handshake.test',{"test" : test, apioId:Apio.System.getApioIdentifier()})
+
+        })
+        socket_cloud.on('apio.remote.handshake.test.success',function(data){
+            Apio.Util.log("This ApioOS has been successfully authenticated on ApioCloud. Storing the Auth Token");
+            Apio.Remote.token = data.token;
+        })
+        socket_cloud.on('apio.remote.handshake.test.error',function(data){
+            Apio.Util.log("This ApioOS failed authentication on ApioCloud. Retrying...")
+            if (Apio.Remote.connectionRetryCounter > 3) {
+                Apio.Util.log("This ApioOS exceeded the number of connection retry available. Aborting ApioCloud connection. This problem may be Cloud related, check cloud.apio.cc/status for updates about our servers's status or contact us at support@apio.cc")
+            } else {
+                Apio.Remote.connectionRetryCounter++;
+                Apio.Util.log("ApioCloud connection ")
+                Apio.Remote.Socket.emit('apio.server.handshake',{
+                    apioId: Apio.System.getApioIdentifier()
+                })
+            }
+
+        })
+
+
+        socket_cloud.on('apio.remote.sync.request', function(data) {
+            console.log("The Apio Cloud is requesting sync data. I'm sending it")
+            var payload = {
+                apio: {
+                    system: {
+                        apioId: Apio.System.getApioIdentifier()
+                    }
+                }
+            };
+            async.series([
+
+                    function(callback) {
+                        Apio.Object.list(function(err, data) {
+                            if (!err)
+                                callback(null, data);
+                            else
+                                callback(err)
+                        })
+
+                    },
+                    function(callback) {
+                        Apio.State.list(function(err, data) {
+                            if (!err)
+                                callback(null, data);
+                            else
+                                callback(err)
+                        })
+                    },
+                    function(callback) {
+                        Apio.Event.list(function(err, data) {
+                            if (!err)
+                                callback(null, data);
+                            else
+                                callback(err)
+                        })
+                    }
+                ],
+                // optional callback
+                function(err, results) {
+                    payload.apio.objects = results[0];
+                    payload.apio.states = results[1];
+                    payload.apio.events = results[2];
+                    payload.apio.system = {
+                        apioId: Apio.System.getApioIdentifier().toString()
+                    }
+                    socket_cloud.emit('apio.server.sync', payload);
+                    //Ora invio le appp
+                    console.log("ApioOS>>> Compressing and packaging applications for the upload... ")
+                    var compress = new targz().compress('./public/applications', './public/applications.tar.gz', function(err) {
+                        if (err)
+                            console.log(err);
+                        else
+                            console.log("ApioOS>>> Compressing ended! ")
+                        var formData = {
+                            applications: fs.createReadStream(__dirname + '/public/applications.tar.gz')
+                        };
+                        request.post({
+                            url: configuration.remote.uri + '/apio/sync/' + Apio.System.getApioIdentifier(),
+                            formData: formData
+                        }, function optionalCallback(err, httpResponse, body) {
+                            if (err) {
+                                return console.error('ApioOS>>> Error while sending apps to :' + configuration.remote.uri + '/apio/sync/', err);
+                            }
+                            console.log('ApioOS>>>> Applications Upload successful!');
+
+                            Apio.Database.db.stats(function(err, stats){
+                                if(err){
+                                    console.log("+++++++++++++++ERROR+++++++++++++++");
+                                    console.log(err);
+                                }
+                                //else if(parseInt(stats.storageSize)/1024/1024 >= 100){
+                                else if(stats.storageSize){
+                                    console.log("DB reached to maximum size, sending logs to cloud");
+                                    Apio.Database.db.collection("Objects").find().toArray(function(error, objs) {
+                                        if(error){
+                                            console.log("Unable to execute query in collection Objects");
+                                        }
+                                        else if(objs){
+                                            for(var i in objs){
+                                                if(objs[i].log){
+                                                    var send = {
+                                                        //log : objs[i].log,
+                                                        objectId : objs[i].objectId
+                                                    };
+                                                    /*for(var j in objs[i].log){
+                                                        send[j] = objs[i].log[j];
+                                                    }*/
+                                                    Apio.Remote.socket.emit('apio.server.object.log.update', send);
+                                                    Apio.Database.db.collection("Objects").update({ objectId : objs[i].objectId }, { $set : { log : {} } }, function(error_, result){
+                                                        if(error_){
+                                                            console.log("Unable to update object with objectId "+objs[i].objectId);
+                                                        }
+                                                        else if(result){
+                                                            Apio.Database.db.command({ compact: 'Objects', paddingFactor: 1 }, function(err_, result_){
+                                                                if(err_){
+                                                                    console.log("Unable to compact collection Objects");
+                                                                }
+                                                                else if(result_){
+                                                                    console.log("Return is:");
+                                                                    console.log(result_);
+                                                                }
+                                                            });
+                                                        }
+                                                    });
+                                                }
+                                            }
+                                        }
+                                    });
+                                }
+                            });
+
+                        });
+                    });
+                });
+
+
+        })
+        socket_cloud.on('apio.remote.state.create', function(data) {
+            console.log("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+            console.log(data)
+            Apio.State.create(data.state, data.event, function() {
+                console.log('apio.remote.state.create')
+
+                Apio.io.emit('apio.server.state.create', data.state); //Notifico tutti i client
+            })
+        });
+        socket_cloud.on('apio.remote.state.delete', function(data) {
+            Apio.State.delete(data.stateName, function() {
+                console.log('apio.remote.state.delete')
+            })
+        });
+        socket_cloud.on('apio.remote.state.update', function(data) {
+            Apio.State.update(data.stateName, data.state, function() {
+                console.log('apio.remote.state.update')
+            })
+        });
+        socket_cloud.on('apio.remote.state.apply', function(data) {
+            Apio.State.apply(data.stateName, function() {
+                console.log("apio.remote.state.apply " + data.stateName)
+            })
+        });
+        socket_cloud.on('apio.remote.event.create', function(data) {
+            Apio.Util.log("New event created on the cloud")
+            console.log(data)
+            Apio.Event.create(data,function(){
+                console.log("Event from the cloud successfully created")
+            })
+        });
+        socket_cloud.on('apio.remote.event.delete', function(data) {
+            Apio.Event.delete(data.name,function(err){
+                Apio.Util.log("Deleted event "+data.name+"")
+            })
+        });
+        socket_cloud.on('apio.remote.event.update', function(data) {
+            Apio.Util.log("Updating event from athe Cloud...")
+            Apio.Event.update(data.name,data.eventUpdate,function(){
+                Apio.Util.log("Event Updated")
+            })
+
+        });
+        socket_cloud.on('apio.remote.event.launch', function(data) {
+            Apio.Util.log("Launching event from the cloud.")
+        });
+        socket_cloud.on('apio.remote.object.create', function(data) {
+            Apio.Util.log("Syncing new object from the cloud.")
+        });
+        socket_cloud.on('apio.remote.object.list', function(data) {
+
+            console.log("The remote server wants the object list")
+            Apio.Object.list(function(err, data) {
+                if (err)
+                    socket_cloud.emit('apio.server.object.list', {
+                        status: false,
+                        error: err
+                    })
+                else
+                    socket_cloud.emit('apio.server.object.list', {
+                        status: true,
+                        objects: data
+                    })
+            })
+        });
+        socket_cloud.on('apio.remote.object.delete', function(data) {
+            Apio.Util.log("Deleting object from the cloud.")
+        });
+        socket_cloud.on('apio.remote.object.update', function(data) {
+            Apio.Util.log("Updating object from the cloud.")
+        });
+
+
+
+        socket_cloud.on('apio_server_update', function(data) {
+
+
+            Apio.Util.log("Received an update from the cloud. Please rename this event to apio.server.object.update");
+
+            //Loggo ogni richiesta
+            //Commentato per capire cosa fare con sti log
+            //Apio.Logger.log("EVENT",data);
+
+            //Scrivo sul db
+            if (data.writeToDatabase === true) {
+                Apio.Database.updateProperty(data, function() {
+                    //Connected clients are notified of the change in the database
+
+                    Apio.io.emit("apio_server_update", data);
+                    console.log("data vale: ");
+                    console.log(data);
+                    console.log("data.properties vale:");
+                    console.log(data.properties);
+
+                });
+            } else
+                Apio.Util.debug("Skipping write to Database");
+
+
+            //Invio i dati alla seriale se richiesto
+            if (data.writeToSerial === true && Apio.Configuration.serial.enabled == true) {
+                Apio.Serial.send(data);
+            } else
+                Apio.Util.debug("Skipping Apio.Serial.send");
+
+
+
+
+
+        });
+        socket_cloud.on('disconnect', function() {});
+    }
+}
+
+/*var APIO_CONFIGURATION = {
     port : 8083
 }
 var ENVIRONMENT = "production";
@@ -45,11 +352,11 @@ if (process.argv.indexOf('--no-serial') > -1)
     ENVIRONMENT = "development"
 if (process.argv.indexOf('--http-port') > -1) {
     var index = process.argv.indexOf('--http-port');
-    APIO_CONFIGURATION.port = process.argv[index+1];
+    configuration.http.port = process.argv[index+1];
 }
 if (process.argv.indexOf('--serial-port') > -1) {
     var index = process.argv.indexOf('--serial-port');
-    Apio.Serial.Configuration.port = process.argv[index+1];
+    configuration.serial.port = process.argv[index+1];
 }
 
 if (process.argv.indexOf('--profile') > -1) {
@@ -77,15 +384,19 @@ if (process.argv.indexOf('--logmemory') > -1) {
     setInterval(function(){
         fs.appendFileSync('memory.log', process.memoryUsage().heapUsed+"\n");
     },5*1000)
-}
+}*/
 
 
 var HOST = '192.168.1.109';
 var PORT = 6969;
 
 var routes = {};
-routes.dashboard = require('./routes/dashboard.route.js');
-routes.core = require('./routes/core.route.js');
+routes.dashboard = require('./routes/dashboard.route.js')(Apio);
+routes.events = require('./routes/events.js')(Apio);
+routes.states = require('./routes/states.js')(Apio);
+routes.objects = require('./routes/objects.js')(Apio);
+routes.notifications = require('./routes/notifications.js')(Apio);
+routes.users = require('./routes/users.js')(Apio);
 
 
 
@@ -111,21 +422,21 @@ function puts(error, stdout, stderr) {
 }
 
 
-/*if (ENVIRONMENT == 'production')
-    Apio.Serial.init();*/
-com.list(function (err, ports) {
-  if (err) {
-    Apio.Util.debug("Unable to get serial ports, error: ", err);
-  } else {
-    ports.forEach(function (port) {
-    console.log(port);
-    if(String(port.manufacturer) === "Apio Dongle"){
-      Apio.Serial.Configuration.port = String(port.comName);
-      Apio.Serial.init();
+if (Apio.Configuration.serial.enabled === true){
+  com.list(function (err, ports) {
+    if (err) {
+      Apio.Util.debug("Unable to get serial ports, error: ", err);
+    } else {
+      ports.forEach(function (port) {
+      console.log(port);
+      if(String(port.manufacturer) === "Apio Dongle"){
+        configuration.serial.port = String(port.comName);
+        Apio.Serial.init();
+      }
+    });
     }
   });
-  }
-});
+}
 
 Apio.Socket.init(http);
 Apio.Mosca.init();
@@ -136,6 +447,7 @@ Apio.Database.connect(function(){
     */
 
     Apio.System.resumeCronEvents(); //Ricarica dal db tutti i cron events
+    //setupRemoteConnection();
 });
 
 // view engine setup
@@ -144,35 +456,76 @@ app.set("view engine", "jade");
 
 
 app.use(logger("dev"));
-app.use(bodyParser.json({limit: '50mb'}));
-app.use(bodyParser.urlencoded({limit: '50mb', extended: true}));
-/*
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded());
-*/
-app.use(cookieParser());
+app.use(bodyParser.json({
+    limit: '50mb'
+}));
+app.use(bodyParser.urlencoded({
+    limit: '50mb',
+    extended: true
+}));
+app.use(session({
+    store: new mongoSession({
+        db: configuration.database.database
+    }),
+    secret: 'e8cb0757-f5de-4c109-9774-7Bf45e79f285',
+    resave: true,
+    saveUninitialized: true
+}))
+
 app.use(express.static(path.join(__dirname, "public")));
 
+app.post('/apio/log',function(req,res){
+    var log_entry = {
+        timestamp : Date.now(),
+        source : req.body.log.source || null, //Una stringa che identifica chi ha prodotto questo log
+        event : req.body.log.event || null, //Una stringa che identifica il tipo di evento
+        value : req.body.log.value || null, //Un valore assegnato all'evento
+    }
 
-app.get('/',function(req,res){
+    Apio.Logger.log(log_entry);
+})
+
+app.get('/', function(req, res) {
     res.sendfile('public/html/index.html');
 })
-app.post('/apio/authenticate',function(req,res){
-    var user = req.body.user;
-    var password = req.body.password;
+app.get('/admin', function(req, res) {
+    res.sendfile('public/html/settings.html');
+})
 
-    if (user === 'apio' && password === 'apio')
-        res.send({
-            status : true
-        })
+app.post('/apio/user/setCloudAccess', function(req, res) {
+    var user = req.body.user;
+    var flag;
+    if (req.body.cloudAccess === true)
+        flag = true
     else
-        res.status(401).send({
-            status : false,
-            errors : [{
-                code : 401,
-                message : 'Username or password did not match.'
-            }]
-        })
+        flag = false;
+
+    Apio.Database.db.collection('Users').update({
+        email: user.email
+    }, {
+        $set: {
+            'enableCloud': flag
+        }
+    }, function(err) {
+        if (err) {
+            Apio.Util.log("Unable to enable the user " + user.email + " on the cloud due to a local database error.")
+            console.log(err);
+        } else {
+            Apio.Util.log("The user has been locally enabled to access the cloud. Now telling ApioCloud...")
+            Apio.Util.log("Contacting ApioCloud to enable user "+user.email+" ...")
+            request.post(configuration.remote.uri + '/apio/user/' + user.email + '/editAccess', {
+                form: {
+                    "apioId": Apio.System.getApioIdentifier(),
+                    "grant": flag
+                }
+            }, function(err, httpResponse, body) {
+                Apio.Util.log("ApioCloud responded with ("+body+").")
+                var response = JSON.parse(body);
+                res.send(response)
+            })
+        }
+    })
+
 })
 
 app.post('/apio/adapter',function(req,res){
@@ -239,13 +592,13 @@ app.get("/dashboard",routes.dashboard.index);
 /*
 *   Crea un nuovo evento
 **/
-app.post("/apio/event",routes.core.events.create);
+app.post("/apio/event",routes.events.create);
 
-app.get('/apio/notifications',routes.core.notifications.list);
-app.get('/apio/notifications/listDisabled',routes.core.notifications.listdisabled);
-app.post('/apio/notifications/markAsRead',routes.core.notifications.delete);
-app.post('/apio/notifications/disable',routes.core.notifications.disable);
-app.post('/apio/notifications/enable',routes.core.notifications.enable);
+app.get('/apio/notifications',routes.notifications.list);
+app.get('/apio/notifications/listDisabled',routes.notifications.listdisabled);
+app.post('/apio/notifications/markAsRead',routes.notifications.delete);
+app.post('/apio/notifications/disable',routes.notifications.disable);
+app.post('/apio/notifications/enable',routes.notifications.enable);
 
 
     app.post('/apio/notify',function(req,res){
@@ -490,18 +843,18 @@ app.post('/apio/notifications/enable',routes.core.notifications.enable);
     });
 
 /* Returns all the events */
-app.get("/apio/event",routes.core.events.list)
+app.get("/apio/event",routes.events.list)
 /* Return event by name*/
-app.get("/apio/event/:name",routes.core.events.getByName)
+app.get("/apio/event/:name",routes.events.getByName)
 
-app.delete("/apio/event/:name",routes.core.events.delete)
+app.delete("/apio/event/:name",routes.events.delete)
 
-app.put("/apio/event/:name",routes.core.events.update);
+app.put("/apio/event/:name",routes.events.update);
 
 /****************************************************************
 ****************************************************************/
 
-app.post("/apio/state/apply",routes.core.states.apply);
+app.post("/apio/state/apply",routes.states.apply);
 /*app.post("/apio/state/apply",function(req,res){
     console.log("Ciao vorresti applicare uno stato, ma non puoi.")
     res.send({});
@@ -567,17 +920,17 @@ app.put("/apio/state/:name",function(req,res){
 /*
     Creazione stato
  */
-app.post("/apio/state",routes.core.states.create);
+app.post("/apio/state",routes.states.create);
 
 
 /*
     Returns state list
  */
-app.get("/apio/state",routes.core.states.get);
+app.get("/apio/state",routes.states.list);
 /*
 Returns a state by its name
  */
-app.get("/apio/state/:name",routes.core.states.getByName);
+app.get("/apio/state/:name",routes.states.getByName);
 
 
 //TODO sostituire l'oggetto 1 con un oggetto verify in maniera tale da evitare la presenza di un oggetto.
@@ -618,11 +971,11 @@ app.get("/app",function(req,res){
 /*
 *   Lancia l'evento
 */
-app.get("/apio/event/launch",routes.core.events.launch)
+app.get("/apio/event/launch",routes.events.launch)
 /*
 *   restituisce la lista degli eventi
 */
-app.get("/apio/event",routes.core.events.list)
+app.get("/apio/event",routes.events.list)
 
 /// error handlers
 
@@ -726,11 +1079,11 @@ app.post('/apio/database/createNewApioAppFromEditor', routes.dashboard.createNew
 app.post('/apio/database/createNewApioApp', routes.dashboard.createNewApioApp);
 
 
-app.get('/apio/database/getObjects',routes.core.objects.get);
-app.get('/apio/database/getObject/:id',routes.core.objects.getById);
+app.get('/apio/database/getObjects',routes.objects.list);
+app.get('/apio/database/getObject/:id',routes.objects.getById);
 
-app.patch('/apio/object/:id',routes.core.objects.update);
-app.put('/apio/object/:id',routes.core.objects.update);
+app.patch('/apio/object/:id',routes.objects.update);
+app.put('/apio/object/:id',routes.objects.update);
 
 app.get("/apio/object/:obj", function(req, res){
         Apio.Database.db.collection('Objects').findOne({objectId : req.params.obj},function(err, data){
@@ -827,133 +1180,7 @@ Apio.io.on("connection", function(socket){
     });
     socket.join("apio_client");
 
-    socket.on("apio_client_update",function(data){
-        var x = data;
-        try{
-            data = eval('('+data+')');
-            var check = function(d){
-                for(var i in d){
-                    if(d[i] == 'true'){
-                        d[i] = true;
-                    }
-                    else if(d[i] == 'false'){
-                        d[i] = false;
-                    }
-                    else if(typeof d[i] === "number"){
-                        d[i] = d[i].toString();
-                    }
-                    else if(d[i] instanceof Object){
-                        check(d[i]);
-                    }
-                }
-            };
-            check(data);
-        }
-        catch(e){
-            data = x;
-        }
-
-
-
-        console.log("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
-        console.log("App.js on(apio_client_update)  received a message");
-
-        //Loggo ogni richiesta
-        //Commentato per capire cosa fare con sti log
-        //Apio.Logger.log("EVENT",data);
-
-        //Scrivo sul db
-        if (data.writeToDatabase === true) {
-            Apio.Database.updateProperty(data, function () {
-                //Connected clients are notified of the change in the database
-                socket.broadcast.emit("apio_server_update", data);
-                console.log("data vale: ");
-                console.log(data);
-                console.log("data.properties vale:");
-                console.log(data.properties);
-                Apio.Database.db.collection("States").findOne({objectId: data.objectId, properties: data.properties}, function (err, result) {
-                    if (err) {
-                        console.log("Error while fetching states");
-                    }
-                    else {
-                        var arr = [];
-                        console.log("result vale:");
-                        console.log(result);
-                        var applyStateFn = function (stateName, callback) {
-                            Apio.Database.db.collection("States").findOne({name: stateName}, function (err, state) {
-                                if (err) {
-                                    console.log("applyState unable to apply state");
-                                    console.log(err);
-                                }
-                                else {
-                                    arr.push(state);
-                                    Apio.Database.updateProperty(state, function () {
-                                        Apio.io.emit("apio_server_update", state);
-                                        Apio.Database.db.collection("Events").find({triggerState: state.name}).toArray(function (err, data) {
-                                            if (err) {
-                                                console.log("error while fetching events");
-                                                console.log(err);
-                                            }
-                                            console.log("Ho trovato eventi scatenati dallo stato " + state.name);
-                                            console.log(data);
-                                            if(callback && data.length == 0){
-                                                callback();
-                                            }
-                                            //data è un array di eventi
-                                            data.forEach(function (ev, ind, ar) {
-                                                var states = ev.triggeredStates;
-                                                states.forEach(function (ee, ii, vv) {
-                                                    applyStateFn(ee.name, callback);
-                                                })
-                                            })
-                                        });
-                                    });
-                                }
-                            });
-                        };
-                        applyStateFn(result.name, function(){
-                            if(ENVIRONMENT == "production"){
-                                var pause = function (millis) {
-                                    var date = new Date();
-                                    var curDate = null;
-                                    do {
-                                        curDate = new Date();
-                                    } while (curDate - date < millis);
-                                };
-
-                                console.log("arr vale:");
-                                console.log(arr);
-                                for(var i in arr){
-                                    Apio.Serial.send(arr[i], function(){
-                                        pause(80);
-                                    })
-                                }
-                                arr = [];
-                            }
-                        });
-                    }
-                });
-
-
-            });
-        }
-        else
-            Apio.Util.debug("Skipping write to Database");
-
-
-        //Invio i dati alla seriale se richiesto
-        if (data.writeToSerial === true && ENVIRONMENT == 'production') {
-            Apio.Serial.send(data);
-        }
-        else
-            Apio.Util.debug("Skipping Apio.Serial.send");
-
-
-
-
-
-    });
-        socket.on('apio_notification', function(data) {
+    socket.on('apio_notification', function(data) {
                 console.log("> Arrivato un update, mando la notifica");
                 //Prima di tutto cerco la notifica nel db
                 console.log(data);
@@ -1069,6 +1296,25 @@ Apio.io.on("connection", function(socket){
 
 
         })
+        socket.on("input", function(data) {
+            console.log(data);
+            Apio.Database.updateProperty(data, function() {
+                socket.broadcast.emit("apio_server_update_", data);
+            });
+            Apio.Serial.send(data);
+        });
+
+        //Streaming
+        socket.on("apio_client_stream", function(data) {
+            socket.broadcast.emit("apio_server_update", data);
+            Apio.Serial.stream(data);
+        })
+
+        socket.on("apio_client_update", function(data){
+            Apio.Object.update(data,function(){
+                Apio.Remote.socket.emit('apio.server.object.update',data)
+            })
+        });
 
 });
 
@@ -1079,13 +1325,14 @@ Apio.io.on("disconnect",function(){
 
 
 
-var server = http.createServer(app);
+  var server = http.createServer(app);
 
 
-Apio.io.listen(server);
-server.listen(APIO_CONFIGURATION.port,function() {
-console.log("APIO server started on port "+APIO_CONFIGURATION.port);
-});
+    Apio.io.listen(server);
+    server.listen(configuration.http.port, function() {
+        Apio.Util.log("APIO server started on port " + configuration.http.port + " using the configuration:");
+        console.log(util.inspect(configuration,{colors:true}));
+    });
 
 
 

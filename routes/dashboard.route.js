@@ -55,7 +55,8 @@ function decodeBase64Image(dataString) {
   return response;
 };
 
-module.exports = {
+module.exports = function(Apio){
+  return {
 	index : function(req,res) {
 			res.sendfile("public/dashboardApp/dashboard.html");
 		},
@@ -100,7 +101,7 @@ module.exports = {
 	    		else{
 
 	    			if(req.body.hasOwnProperty('adapter')){
-						fs.writeFileSync(path+'/'+dummy+'/adapter.js',req.body.adapter);	    		
+						fs.writeFileSync(path+'/'+dummy+'/adapter.js',req.body.adapter);
 			    	}
 
 		    		fs.writeFileSync('public/applications/'+newId+'/_' + newId + '/_' + newId + '.ino',ino);
@@ -114,7 +115,7 @@ module.exports = {
 			    }
 	    	})
 	    }
-	   
+
 	},
 	folderApioApp : function(req,res){
 		var id = req.body.id;
@@ -151,7 +152,7 @@ module.exports = {
 	    object.makefile = fs.readFileSync(path+'/Makefile', {encoding: 'utf8'});
 	    console.log('GUARDA QUAAAAAA')
 	    console.log(object.makefile)
-	    
+
 	    /*console.log('js:\n'+object.js);
 	    console.log('html:\n'+object.html);
 	    console.log('json:\n'+object.json);
@@ -167,7 +168,7 @@ module.exports = {
 	    var ino = req.body.ino;
 	    var html = req.body.html;
 	    var js = req.body.js;
-	    var makefile = req.body.makefile;    
+	    var makefile = req.body.makefile;
 
 	    console.log('APIO: Creating application ' + obj.objectId);
 	    fs.mkdirSync("public/applications/" + obj.objectId);
@@ -187,7 +188,7 @@ module.exports = {
 	        }else{
 	            res.send();
 	        }
-	    });   
+	    });
 
 	},
 	createNewApioApp : function(req,res){
@@ -213,7 +214,7 @@ module.exports = {
 
 	    for (var key in obj.properties){
 	        console.log('key : '+key);
-	        if(obj.properties[key].type!=='List'){ 
+	        if(obj.properties[key].type!=='List'){
 
 	        	if(obj.properties[key].type==='Sensor')
 	        		SensorInProperties = 1;
@@ -228,7 +229,7 @@ module.exports = {
 	                //bisognerebbe far settare la voce della select che vogliono come prima voce attraverso il wizard
 	                for(var k in o) return k;
 	            }
-	  
+
 
 	        	console.log('obj.properties[key].name: ' + obj.properties[key].name);
 	            console.log('obj.properties[key].firstItemValue: ' + returnFirstListItemValue(obj.properties[key].items));
@@ -242,7 +243,7 @@ module.exports = {
 	            console.log('objectToSave.properties[obj.properties[key].name]: ' + objectToSave.properties[obj.properties[key].name]);*/
 	        }
 	        console.log();
-	    }; 
+	    };
 
 	    //objectToSave.db=JSON.parse(mongo.slice(7,mongo.length)); //problema db : { db : { ... }}
 	    console.log('mongo: '+mongo);
@@ -269,7 +270,7 @@ module.exports = {
 	            fs.writeFileSync('public/applications/'+obj.objectId+'/' + obj.objectId + '.mongo',mongo);
 	            fs.writeFileSync('public/applications/'+obj.objectId+'/icon.png',decodeBase64Image(icon).data);
 	            //fs.writeFileSync('public/applications/'+obj.objectId+'/' + obj.objectId + '.json',JSON.stringify(objectToSave));
-	            
+
 	            //Injection of the libraries file in the sketch folder
 	            var source = 'public/arduino/';
 	            console.log('obj.protocol: '+ obj.protocol);
@@ -311,7 +312,7 @@ module.exports = {
 
 	            res.send();
 	        }
-	    });   
+	    });
 
 	},
 	exportApioApp : function(req,res){
@@ -338,12 +339,12 @@ module.exports = {
 	    //jsonObject = JSON.parse(object.json);
 	    jsonObject = JSON.parse(object.mongo);
 	    console.log('jsonObject.name: '+jsonObject.name);
-	    
+
 	    //TO FIX: MAKE REPLACE RECURSIVE
 	    object.js=object.js.replace('ApioApplication'+id,'ApioApplication'+dummy+'');
 	    object.js=object.js.replace('ApioApplication'+id,'ApioApplication'+dummy+'');
 	    object.js=object.js.replace('ApioApplication'+id,'ApioApplication'+dummy+'');
-	    
+
 	    object.html=object.html.replace('ApioApplication'+id,'ApioApplication'+dummy+'');
 	    object.html=object.html.replace('ApioApplication'+id,'ApioApplication'+dummy+'');
 	    object.html=object.html.replace('applications/'+id+'/'+id+'.js','applications/'+dummy+'/'+dummy+'.js');
@@ -361,7 +362,7 @@ module.exports = {
 	        fs.mkdirSync(path +'/'+ dummy);
 	        fs.mkdirSync(path +'/'+ dummy + '/_' + dummy);
 	    	if(object.hasOwnProperty('adapter')){
-				fs.writeFileSync(path+'/'+dummy+'/adapter.js',object.adapter);	    		
+				fs.writeFileSync(path+'/'+dummy+'/adapter.js',object.adapter);
 	    	}
 	        fs.writeFileSync(path+'/'+dummy+'/icon.png',object.icon);
 	        fs.writeFileSync(path+'/'+dummy+'/' + dummy + '.html',object.html);
@@ -370,9 +371,9 @@ module.exports = {
 	        fs.writeFileSync(path+'/'+dummy+'/_' + dummy + '/_' + dummy + '.ino',object.ino);
 	        fs.writeFileSync(path+'/'+dummy+'/_' + dummy + '/Makefile',object.makefile);
 	        //fs.writeFileSync(path+'/'+dummy+'/' + dummy + '.json',object.json);
-	 
+
 	        //var compress = new targz().compress('/applications/:id', '/applications/temp/:id.tar.gz', function(err){
-	        
+
 	        var compress = new targz().compress(path +'/'+ dummy, path+'/'+jsonObject.name+'.tar.gz', function(err){
 	            if(err)
 	                console.log(err);
@@ -396,13 +397,13 @@ module.exports = {
 	        console.log(e);
 	        return;
 	    }
-	
+
 	},
 	exportInoApioApp : function(req,res){
 	    console.log('/apio/app/exportIno')
 	    var obj = {};
 	    obj.objectId = req.query.id;
-	    
+
 	    try {
 	            var compress = new targz().compress("public/applications/" + obj.objectId +'/_' + obj.objectId, "public/applications/" + obj.objectId +'/' + obj.objectId +'.tar.gz', function(err){
 	                if(err)
@@ -431,7 +432,7 @@ module.exports = {
 	        console.log(e);
 	        return;
 	    }
-	    
+
 	},
 	deleteApioApp : function(req,res){
 	    var id = req.body.id;
@@ -449,14 +450,14 @@ module.exports = {
 	        }
 
 	    })
-	    
+
 	},
 	uploadApioApp : function(req,res){
 	    console.log('/apio/app/upload')
-	    
+
 	    deleteFolderRecursive('upload');
 	    fs.mkdirSync('upload');
-	    
+
 	    var form = new formidable.IncomingForm();
 	        form.uploadDir = "upload";
 	        form.keepExtensions = true;
@@ -503,12 +504,12 @@ module.exports = {
 
 	                        var dummy = (parseInt(data)+1).toString();
 	                        console.log('new dummy is: '+ dummy)
-	                        
-	                        
+
+
 	                        object.js=object.js.replace('ApioApplication'+id,'ApioApplication'+dummy+'');
 	                        object.js=object.js.replace('ApioApplication'+id,'ApioApplication'+dummy+'');
 	                        object.js=object.js.replace('ApioApplication'+id,'ApioApplication'+dummy+'');
-	                        
+
 	                        object.html=object.html.replace('ApioApplication'+id,'ApioApplication'+dummy+'');
 	                        object.html=object.html.replace('ApioApplication'+id,'ApioApplication'+dummy+'');
 	                        object.html=object.html.replace('applications/'+id+'/'+id+'.js','applications/'+dummy+'/'+dummy+'.js');
@@ -519,7 +520,7 @@ module.exports = {
 	                        console.log('"objectId before":"'+object.mongo.objectId+'"')
 	                        object.mongo.objectId=dummy;
 	                        console.log('"objectId after":"'+object.mongo.objectId+'"')
-	                        
+
 	                        //Apio.Database.db.collection('Objects').insert(JSON.parse(object.json),function(err,data){
 	                        Apio.Database.db.collection('Objects').insert(object.mongo,function(err,data){
 	                            if(err)
@@ -532,7 +533,7 @@ module.exports = {
 	                                fs.mkdirSync(path +'/'+ dummy);
 	                                fs.mkdirSync(path +'/'+ dummy + '/_' + dummy);
 	                                if(object.hasOwnProperty('adapter')){
-										fs.writeFileSync(path+'/'+dummy+'/adapter.js',object.adapter);	    		
+										fs.writeFileSync(path+'/'+dummy+'/adapter.js',object.adapter);
 									}
 	                                fs.writeFileSync(path+'/'+dummy+'/icon.png',object.icon);
 	                                fs.writeFileSync(path+'/'+dummy+'/' + dummy + '.html',object.html);
@@ -570,7 +571,7 @@ module.exports = {
 	            res.send(data);
 	        }
 	    });
-	
+
 	},
 	gitCloneApp : function(req,res){
 		console.log('/apio/app/gitCloneApp');
@@ -617,12 +618,12 @@ module.exports = {
 
                     var dummy = (parseInt(data)+1).toString();
                     console.log('new dummy is: '+ dummy)
-                    
+
 
                     object.js=object.js.replace('ApioApplication'+id,'ApioApplication'+dummy+'');
                     object.js=object.js.replace('ApioApplication'+id,'ApioApplication'+dummy+'');
                     object.js=object.js.replace('ApioApplication'+id,'ApioApplication'+dummy+'');
-                    
+
                     object.html=object.html.replace('ApioApplication'+id,'ApioApplication'+dummy+'');
                     object.html=object.html.replace('ApioApplication'+id,'ApioApplication'+dummy+'');
                     object.html=object.html.replace('applications/'+id+'/'+id+'.js','applications/'+dummy+'/'+dummy+'.js');
@@ -633,11 +634,11 @@ module.exports = {
                     console.log(object.mongo)
                     console.log('"objectId before":"'+object.mongo.objectId+'"')
                     object.mongo.objectId=dummy;
-                    
-                    var appoggio = JSON.stringify(object.mongo); 
+
+                    var appoggio = JSON.stringify(object.mongo);
 
                     console.log('"objectId after":"'+object.mongo.objectId+'"')
-                    
+
                     //Apio.Database.db.collection('Objects').insert(JSON.parse(object.json),function(err,data){
                     Apio.Database.db.collection('Objects').insert(object.mongo,function(err,data){
                     	console.log()
@@ -653,7 +654,7 @@ module.exports = {
                             fs.mkdirSync(path +'/'+ dummy);
                             fs.mkdirSync(path +'/'+ dummy + '/_' + dummy);
                             if(object.hasOwnProperty('adapter')){
-								fs.writeFileSync(path+dummy+'/adapter.js',req.body.adapter);	    		
+								fs.writeFileSync(path+dummy+'/adapter.js',req.body.adapter);
 							}
                             fs.writeFileSync(path+'/'+dummy+'/icon.png',object.icon, {encoding: 'base64'});
                             fs.writeFileSync(path+'/'+dummy+'/' + dummy + '.html',object.html);
@@ -670,7 +671,8 @@ module.exports = {
 				}
 
 			})
-			//res.send({data:'gitCloneApp has been executed'});	
+			//res.send({data:'gitCloneApp has been executed'});
 		})
 	}
+}
 }
