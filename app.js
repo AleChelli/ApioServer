@@ -440,7 +440,7 @@ if (Apio.Configuration.serial.enabled === true){
 }
 
 Apio.Socket.init(http);
-Apio.Mosca.init();
+//Apio.Mosca.init();
 Apio.Database.connect(function(){
     /*
     Inizializzazione servizi Apio
@@ -1151,7 +1151,7 @@ app.get("/apio/object/:obj", function(req, res){
 /*
 *   Mosca listener instantiation
 */
-Apio.Mosca.server.on('clientConnected', function(client) {
+/*Apio.Mosca.server.on('clientConnected', function(client) {
   console.log('client connected', client.id);
 });
 

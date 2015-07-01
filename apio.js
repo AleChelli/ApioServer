@@ -47,6 +47,7 @@
     var mqtt = require("mqtt");
     var mosca = require('mosca');
     var request = require('request');
+    var crypto = require('crypto');
     var uuidgen = require('node-uuid');
     var async = require('async')
     Apio.Configuration = config;
