@@ -437,7 +437,7 @@
             ports.forEach(function(port) {
 
 
-              if (String(port.manufacturer) === "Apio Dongle") {
+              if (String(port.manufacturer) === Apio.Configuration.serial.manufacturer) {
                 //console.log(port.comName);
                 //console.log(Apio.Configuration.serial.port)
                 Apio.Configuration.serial.port= port.comName;
@@ -2042,18 +2042,18 @@
 
 
               Apio.Database.updateProperty(state, function() {
-                  //Apio.Serial.send(state, function() {
+                  Apio.Serial.send(state, function() {
 
 
-                      //if (callback) {
-                          //callback();
-                      //}
-                  //})
+                      if (callback) {
+                          callback();
+                      }
+                  })
               });
           })
           //At this point, the http response has been sent
           //but we keep looking for events to launch
-          /*Apio.Database.db.collection('Events')
+          Apio.Database.db.collection('Events')
               .find({
                   triggerState: stateName
               })
@@ -2065,7 +2065,7 @@
                           Apio.Event.launch(event.name);
                       })
                   }
-              })*/
+              })
       }
 
       Apio.Event = {};

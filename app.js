@@ -429,7 +429,7 @@ if (Apio.Configuration.serial.enabled === true){
     } else {
       ports.forEach(function (port) {
       console.log(port);
-      if(String(port.manufacturer) === "Apio Dongle"){
+      if(String(port.manufacturer) === configuration.serial.manufacturer){
         configuration.serial.port = String(port.comName);
         Apio.Serial.init();
       }
@@ -1328,7 +1328,7 @@ Apio.io.on("disconnect",function(){
 });
 
 
-
+  //http.globalAgent.maxSockets = Infinity;
   var server = http.createServer(app);
 
 

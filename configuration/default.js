@@ -7,7 +7,8 @@ module.exports = {
 	serial : {
 		enabled : true,
 		port : '/dev/ttyACM0',
-		baudrate : 115200
+		baudrate : 115200,
+		manufacturer: "Apio Dongle"
 	},
 
 	remote : {
