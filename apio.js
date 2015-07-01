@@ -47,6 +47,7 @@
     var mqtt = require("mqtt");
     var mosca = require('mosca');
     var request = require('request');
+    var uuidgen = require('node-uuid');
     var async = require('async')
     Apio.Configuration = config;
     /* Set to false to disable debugging messages */
@@ -2021,6 +2022,52 @@
           })
       };
 
+      function getStateByName(stateName, callback) {
+          Apio.Database.db.collection('States')
+              .findOne({
+                  name: stateName
+              }, function(err, state) {
+                  if (err) {
+                      console.log("Error in while fetching applied state data.")
+                      console.log(error);
+                      callback(error, null)
+                  } else {
+                      callback(null, state)
+                  }
+              })
+      }
+
+      Apio.State.apply = function(stateName, callback, options) {
+          getStateByName(stateName, function(error, state) {
+
+
+              Apio.Database.updateProperty(state, function() {
+                  Apio.Serial.send(state, function() {
+
+
+                      if (callback) {
+                          callback();
+                      }
+                  })
+              });
+          })
+          //At this point, the http response has been sent
+          //but we keep looking for events to launch
+          /*Apio.Database.db.collection('Events')
+              .find({
+                  triggerState: stateName
+              })
+              .toArray(function(err, triggeredEvents) {
+                  if (err) {
+                      console.log("Error in applyState while fetching triggered events.")
+                  } else {
+                      triggeredEvents.forEach(function(event) {
+                          Apio.Event.launch(event.name);
+                      })
+                  }
+              })*/
+      }
+
       Apio.Event = {};
       Apio.Event.create = function(evt, callback) {
           Apio.Database.db.collection('Events').insert(evt, function(err, result) {
@@ -2090,6 +2137,60 @@
           })
       };
 
+      Apio.Event.launch = function(eventName, cb) {
+          var counter = 0;
+          var loops = 1;
+          var loopCounter = 1;
+
+          Apio.Database.db.collection('Events')
+              .findOne({
+                      name: eventName
+                  },
+                  function(error, event) {
+
+                      if (error) {
+                          console.log("launchEvent() Error while fetching event " + eventName);
+                          callback(error);
+                      }
+                      if (event !== null) {
+                          console.log("Ecco gli scatenati");
+                          console.log(event.triggeredStates)
+                          if (event.hasOwnProperty('loop'))
+                              loops = event.loop;
+                          var processTriggeredState = function() {
+                              var delay = 0;
+                              if (event.triggeredStates[counter].hasOwnProperty('delay'))
+                                  delay = 10; //event.triggeredStates[counter].delay;
+                              console.log("Setto il timeout dello stato " + event.triggeredStates[counter].name + " al valore " + delay)
+                              setTimeout(function() {
+
+                                  Apio.State.apply(event.triggeredStates[counter].name, function() {
+
+                                      console.log("Ho processato " + event.triggeredStates[counter].name);
+                                      counter++;
+                                      if (counter >= event.triggeredStates.length) {
+                                          counter = 0;
+                                          loopCounter++;
+                                          console.log("\nFinito il ciclo")
+                                      }
+                                      if (loopCounter > loops) {
+                                          console.log("\nFinito evento")
+                                      } else {
+                                          processTriggeredState();
+                                      }
+                                  })
+                              }, delay)
+
+                          }
+                          processTriggeredState();
+
+
+
+
+                      }
+                  })
+      }
+
       Apio.Object = {};
       Apio.Object.list = function(callback) {
           Apio.Database.db.collection('Objects')
@@ -2144,6 +2245,38 @@
       Apio.System = {
           ApioIdentifier: null
       };
+
+      Apio.System.getApioIdentifier = function() {
+          if (null !== Apio.System.ApioIdentifier && 'undefined' !== typeof Apio.System.ApioIdentifier) {
+              return Apio.System.ApioIdentifier
+          } else {
+              if (fs.existsSync('./Identifier.apio')) {
+                  Apio.System.ApioIdentifier = fs.readFileSync('./Identifier.apio', {
+                      encoding: 'utf-8'
+                  }).trim();
+              } else {
+                  Apio.System.ApioIdentifier = uuidgen.v4()
+                  fs.writeFileSync('./Identifier.apio', Apio.System.ApioIdentifier);
+              }
+              return Apio.System.ApioIdentifier;
+          }
+
+      }
+      Apio.System.getApioSecret = function() {
+          var key = '';
+          if (fs.existsSync('./Secret.apio')) {
+              key = fs.readFileSync('./Secret.apio', {
+                  encoding: 'utf-8'
+              });
+              key = key.trim()
+          } else {
+              //Lo genero per ora, poi ci penserà un installer
+              key = uuidgen.v4()
+              Apio.Util.log("Generating Secret.apio.. THIS MUST BE CREATED AT FACTORY TIME")
+              fs.writeFileSync('./Secret.apio', key);
+          }
+          return key;
+      }
 
       Apio.System.launchEvent = function(eventName, callback) {
         Apio.Database.db.collection('Events')

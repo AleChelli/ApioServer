@@ -11,7 +11,7 @@ module.exports = {
 	},
 
 	remote : {
-		enabled : true,
+		enabled : false,
 		uri : 'http://comfortbox.cloudapp.net'
 	},
 	logging : {

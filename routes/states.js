@@ -27,12 +27,14 @@ module.exports = function(Apio){
 
         },
         apply: function(req, res) {
+
             Apio.State.apply(req.body.state.name,function(){
+							console.log("Richiesta");
                 Apio.Util.log("HTTP requested to apply state "+req.body.state.name)
                 Apio.Remote.socket.emit('apio.server.state.apply',{stateName : req.body.state.name});
                 res.send();
             });
-            
+
         },
         getByName: function(req, res) {
             Apio.State.getByName(req.params.name,function(err,data){
