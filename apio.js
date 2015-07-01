@@ -1026,513 +1026,525 @@
         //SensorID:command:Chiave:Valore
         //Quindi la funzione read, deve fare una query nel db per capire quale azione intraprendere
         //Per il momento invece, in fase di testing, i sensori inviano: TargetADDR:command:chiave:valore
-
+        var command = data.command;
         if (!Apio.Serial.hasOwnProperty("serialPort"))
           throw new Error("The Apio.Serial service has not been initialized. Please, call Apio.Serial.init() before using it.");
+        if (Apio.Database.db) {
+          Apio.Database.db.collection("Objects").findOne({
+              address: data.objectId
+          }, function(err, res) {
+            data.objectId = res.objectId;
+            switch (command) {
+              case "send":
 
-        switch (data.command) {
-          case "send":
+                //Prendo i dati ddell"oggetto in db, scrivo in seriale e updato il db.
+                //In seriale verrà mandata una stringa del tipo
+                //objId:command:chiavivalori
 
-            //Prendo i dati ddell"oggetto in db, scrivo in seriale e updato il db.
-            //In seriale verrà mandata una stringa del tipo
-            //objId:command:chiavivalori
+                //Invece di fare questa query, dovrò cercare gli eventi associati a quel sensore
+                Apio.Database.getObjectById(data.objectId, function(object) {
+                  //object contiene le informazioni aggiuntive dell'oggetto a cui inviare l'evento
+                  //tra cui l'address e il protocol
+                  data.objectId = object.objectId;
+                  data.protocol = object.protocol;
 
-            //Invece di fare questa query, dovrò cercare gli eventi associati a quel sensore
-            Apio.Database.getObjectById(data.objectId, function(object) {
-              //object contiene le informazioni aggiuntive dell'oggetto a cui inviare l'evento
-              //tra cui l'address e il protocol
-              data.objectId = object.objectId;
-              data.protocol = object.protocol;
+                  Apio.Serial.send(data); //Mando data perchè ancora i sensori scrivono in seriale l'evento che vogliono scatenare
+                  //Poi invece manderò i dati recuperati dalla query getEventsByTrigger() o qualcosa del genere
 
-              Apio.Serial.send(data); //Mando data perchè ancora i sensori scrivono in seriale l'evento che vogliono scatenare
-              //Poi invece manderò i dati recuperati dalla query getEventsByTrigger() o qualcosa del genere
+                  Apio.Database.updateProperty(data, function() {
+                    //Notificare i client connessi
 
-              Apio.Database.updateProperty(data, function() {
-                //Notificare i client connessi
+                    Apio.io.to("apio_client").emit("apio_server_update", data);
+                  });
+                });
+                break;
+              case "time":
+                console.log("SONO DENTRO TIME, DATA VALE: ", data);
+                var t = new Date().getTime();
+                Apio.Serial.send("l" + data.objectId + ":time:" + t + "-");
+                break;
+              case "update":
+                console.log("> Arrivato un update, mando la notifica");
+                //Prima di tutto cerco la notifica nel db
+                console.log(data);
+                //Controllo Se esiste uno stato che rispecchia lo stato attuale dell'oggetto
 
-                Apio.io.to("apio_client").emit("apio_server_update", data);
-              });
-            });
-            break;
-          case "time":
-            console.log("SONO DENTRO TIME, DATA VALE: ", data);
-            var t = new Date().getTime();
-            Apio.Serial.send("l" + data.objectId + ":time:" + t + "-");
-            break;
-          case "update":
-            console.log("> Arrivato un update, mando la notifica");
-            //Prima di tutto cerco la notifica nel db
-            console.log(data);
-            //Controllo Se esiste uno stato che rispecchia lo stato attuale dell'oggetto
-
-            if (Apio.Database.db) {
-              Apio.Database.db.collection("Objects").findOne({
-                objectId: data.objectId
-              }, function(err, res) {
-                if (err) {
-                  console.log("Unable to find object with objectId " + data.objectId);
-                } else if (res) {
-                  if (res.sensor === true || res.sensor === "true") {
-                    for (var i in data.properties) {
-                      var x = data.properties[i];
-                      var y = res.properties[i];
-                    }
-                    console.log("x = " + x + ", y = " + y);
-                    Apio.Database.db.collection("States").find({
-                      objectId: data.objectId
-                    }).toArray(function(error, result) {
-                      if (error) {
-                        console.log("Unable to find states of object with objectId " + data.objectId);
-                      } else if (result) {
-                        for (var i in result) {
-                          for (var j in result[i].properties) {
-                            for (var p in data.properties) {
-                              console.log("j = " + j + ", p = " + p);
-                              if (j === p) {
-                                console.log("z = " + result[i].properties[j]);
-                                if (Number(x) > Number(y)) {
-                                  if (Number(result[i].properties[j]) < Number(x) && Number(result[i].properties[j]) > Number(y)) {
-                                    console.log("#Applico perchè sto salendo");
-                                    Apio.Database.db.collection('Objects').findOne({
-                                      objectId: data.objectId
-                                    }, function(err, document) {
-                                      if (err) {
-                                        console.log('Apio.Serial.read Error while looking for notifications');
-                                      } else {
-                                        if (document.hasOwnProperty('notifications')) {
-                                          for (var prop in data.properties) //prop è il nome della proprietà di cui cerco notifiche
-                                            if (document.notifications.hasOwnProperty(prop)) {
-                                            //Ho trovato una notifica da lanciare
-                                            if (document.notifications[prop].hasOwnProperty(result[i].properties[j])) {
-                                              console.log("Ho trovato una notifica per la proprietà " + prop + " e per il valore corrispondente " + data.properties[prop])
-                                              Apio.Database.getObjectById(data.objectId, function(result) {
-                                                var notifica = {
-                                                  objectId: data.objectId,
-                                                  objectName: result.name,
-                                                  message: document.notifications[prop][data.properties[prop]],
-                                                  properties: data.properties,
-                                                  timestamp: new Date().getTime()
-                                                };
-                                                console.log("Mando la notifica");
-                                                Apio.System.notify(notifica);
-                                              });
-                                            } //Se ha una notifica per il valore attuale
-                                            else {
-                                              console.log("Ho una notifica registarata per quella property ma non per quel valore")
-                                            }
-
-
+                if (Apio.Database.db) {
+                  Apio.Database.db.collection("Objects").findOne({
+                    objectId: data.objectId
+                  }, function(err, res) {
+                    if (err) {
+                      console.log("Unable to find object with objectId " + data.objectId);
+                    } else if (res) {
+                      if (res.sensor === true || res.sensor === "true") {
+                        for (var i in data.properties) {
+                          var x = data.properties[i];
+                          var y = res.properties[i];
+                        }
+                        console.log("x = " + x + ", y = " + y);
+                        Apio.Database.db.collection("States").find({
+                          objectId: data.objectId
+                        }).toArray(function(error, result) {
+                          if (error) {
+                            console.log("Unable to find states of object with objectId " + data.objectId);
+                          } else if (result) {
+                            for (var i in result) {
+                              for (var j in result[i].properties) {
+                                for (var p in data.properties) {
+                                  console.log("j = " + j + ", p = " + p);
+                                  if (j === p) {
+                                    console.log("z = " + result[i].properties[j]);
+                                    if (Number(x) > Number(y)) {
+                                      if (Number(result[i].properties[j]) < Number(x) && Number(result[i].properties[j]) > Number(y)) {
+                                        console.log("#Applico perchè sto salendo");
+                                        Apio.Database.db.collection('Objects').findOne({
+                                          objectId: data.objectId
+                                        }, function(err, document) {
+                                          if (err) {
+                                            console.log('Apio.Serial.read Error while looking for notifications');
                                           } else {
-                                            console.log("L'oggetto non ha una notifica registrata per la proprietà " + prop)
-                                          }
-                                        }
-                                      }
-                                    });
+                                            if (document.hasOwnProperty('notifications')) {
+                                              for (var prop in data.properties) //prop è il nome della proprietà di cui cerco notifiche
+                                                if (document.notifications.hasOwnProperty(prop)) {
+                                                //Ho trovato una notifica da lanciare
+                                                if (document.notifications[prop].hasOwnProperty(result[i].properties[j])) {
+                                                  console.log("Ho trovato una notifica per la proprietà " + prop + " e per il valore corrispondente " + data.properties[prop])
+                                                  Apio.Database.getObjectById(data.objectId, function(result) {
+                                                    var notifica = {
+                                                      objectId: data.objectId,
+                                                      objectName: result.name,
+                                                      message: document.notifications[prop][data.properties[prop]],
+                                                      properties: data.properties,
+                                                      timestamp: new Date().getTime()
+                                                    };
+                                                    console.log("Mando la notifica");
+                                                    Apio.System.notify(notifica);
+                                                  });
+                                                } //Se ha una notifica per il valore attuale
+                                                else {
+                                                  console.log("Ho una notifica registarata per quella property ma non per quel valore")
+                                                }
 
-                                    Apio.System.applyState(result[i].name);
-                                  }
-                                } else {
-                                  if (Number(result[i].properties[j]) > Number(x) && Number(result[i].properties[j]) < Number(y)) {
-                                    console.log("#Applico perchè sto scendendo")
-                                    Apio.Database.db.collection('Objects').findOne({
-                                      objectId: data.objectId
-                                    }, function(err, document) {
-                                      if (err) {
-                                        console.log('Apio.Serial.read Error while looking for notifications');
-                                      } else {
-                                        if (document.hasOwnProperty('notifications')) {
-                                          for (var prop in data.properties) //prop è il nome della proprietà di cui cerco notifiche
-                                            if (document.notifications.hasOwnProperty(prop)) {
-                                            //Ho trovato una notifica da lanciare
-                                            if (document.notifications[prop].hasOwnProperty(result[i].properties[j])) {
-                                              console.log("Ho trovato una notifica per la proprietà " + prop + " e per il valore corrispondente " + data.properties[prop])
-                                              Apio.Database.getObjectById(data.objectId, function(result) {
-                                                var notifica = {
-                                                  objectId: data.objectId,
-                                                  objectName: result.name,
-                                                  message: document.notifications[prop][data.properties[prop]],
-                                                  properties: data.properties,
-                                                  timestamp: new Date().getTime()
-                                                };
-                                                console.log("Mando la notifica");
-                                                Apio.System.notify(notifica);
-                                              });
-                                            } //Se ha una notifica per il valore attuale
-                                            else {
-                                              console.log("Ho una notifica registarata per quella property ma non per quel valore")
+
+                                              } else {
+                                                console.log("L'oggetto non ha una notifica registrata per la proprietà " + prop)
+                                              }
                                             }
-
-
-                                          } else {
-                                            console.log("L'oggetto non ha una notifica registrata per la proprietà " + prop)
                                           }
-                                        }
-                                      }
-                                    });
+                                        });
 
-                                    Apio.System.applyState(result[i].name);
+                                        Apio.System.applyState(result[i].name);
+                                      }
+                                    } else {
+                                      if (Number(result[i].properties[j]) > Number(x) && Number(result[i].properties[j]) < Number(y)) {
+                                        console.log("#Applico perchè sto scendendo")
+                                        Apio.Database.db.collection('Objects').findOne({
+                                          objectId: data.objectId
+                                        }, function(err, document) {
+                                          if (err) {
+                                            console.log('Apio.Serial.read Error while looking for notifications');
+                                          } else {
+                                            if (document.hasOwnProperty('notifications')) {
+                                              for (var prop in data.properties) //prop è il nome della proprietà di cui cerco notifiche
+                                                if (document.notifications.hasOwnProperty(prop)) {
+                                                //Ho trovato una notifica da lanciare
+                                                if (document.notifications[prop].hasOwnProperty(result[i].properties[j])) {
+                                                  console.log("Ho trovato una notifica per la proprietà " + prop + " e per il valore corrispondente " + data.properties[prop])
+                                                  Apio.Database.getObjectById(data.objectId, function(result) {
+                                                    var notifica = {
+                                                      objectId: data.objectId,
+                                                      objectName: result.name,
+                                                      message: document.notifications[prop][data.properties[prop]],
+                                                      properties: data.properties,
+                                                      timestamp: new Date().getTime()
+                                                    };
+                                                    console.log("Mando la notifica");
+                                                    Apio.System.notify(notifica);
+                                                  });
+                                                } //Se ha una notifica per il valore attuale
+                                                else {
+                                                  console.log("Ho una notifica registarata per quella property ma non per quel valore")
+                                                }
+
+
+                                              } else {
+                                                console.log("L'oggetto non ha una notifica registrata per la proprietà " + prop)
+                                              }
+                                            }
+                                          }
+                                        });
+
+                                        Apio.System.applyState(result[i].name);
+                                      }
+                                    }
+                                    /*if (Math.abs(Number(x) - Number(y)) >= Math.abs(Number(result[i].properties[j]) - Number(x))) {
+                                     Apio.Database.db.collection('Objects').findOne({
+                                     objectId: data.objectId
+                                     }, function (err, document) {
+                                     if (err) {
+                                     console.log('Apio.Serial.read Error while looking for notifications');
+                                     } else {
+                                     if (document.hasOwnProperty('notifications')) {
+                                     for (var prop in data.properties) //prop è il nome della proprietà di cui cerco notifiche
+                                     if (document.notifications.hasOwnProperty(prop)) {
+                                     //Ho trovato una notifica da lanciare
+                                     if (document.notifications[prop].hasOwnProperty(result[i].properties[j])) {
+                                     console.log("Ho trovato una notifica per la proprietà " + prop + " e per il valore corrispondente " + data.properties[prop])
+                                     Apio.Database.getObjectById(data.objectId, function (result) {
+                                     var notifica = {
+                                     objectId: data.objectId,
+                                     objectName: result.name,
+                                     message: document.notifications[prop][data.properties[prop]],
+                                     properties: data.properties,
+                                     timestamp: new Date().getTime()
+                                     };
+                                     console.log("Mando la notifica");
+                                     Apio.System.notify(notifica);
+                                     });
+                                     } //Se ha una notifica per il valore attuale
+                                     else {
+                                     console.log("Ho una notifica registarata per quella property ma non per quel valore")
+                                     }
+
+
+                                     } else {
+                                     console.log("L'oggetto non ha una notifica registrata per la proprietà " + prop)
+                                     }
+                                     }
+                                     }
+                                     });
+
+                                        Apio.System.applyState(result[i].name);
+                                    }*/
                                   }
                                 }
-                                /*if (Math.abs(Number(x) - Number(y)) >= Math.abs(Number(result[i].properties[j]) - Number(x))) {
-                                 Apio.Database.db.collection('Objects').findOne({
-                                 objectId: data.objectId
-                                 }, function (err, document) {
-                                 if (err) {
-                                 console.log('Apio.Serial.read Error while looking for notifications');
-                                 } else {
-                                 if (document.hasOwnProperty('notifications')) {
-                                 for (var prop in data.properties) //prop è il nome della proprietà di cui cerco notifiche
-                                 if (document.notifications.hasOwnProperty(prop)) {
-                                 //Ho trovato una notifica da lanciare
-                                 if (document.notifications[prop].hasOwnProperty(result[i].properties[j])) {
-                                 console.log("Ho trovato una notifica per la proprietà " + prop + " e per il valore corrispondente " + data.properties[prop])
-                                 Apio.Database.getObjectById(data.objectId, function (result) {
-                                 var notifica = {
-                                 objectId: data.objectId,
-                                 objectName: result.name,
-                                 message: document.notifications[prop][data.properties[prop]],
-                                 properties: data.properties,
-                                 timestamp: new Date().getTime()
-                                 };
-                                 console.log("Mando la notifica");
-                                 Apio.System.notify(notifica);
-                                 });
-                                 } //Se ha una notifica per il valore attuale
-                                 else {
-                                 console.log("Ho una notifica registarata per quella property ma non per quel valore")
-                                 }
-
-
-                                 } else {
-                                 console.log("L'oggetto non ha una notifica registrata per la proprietà " + prop)
-                                 }
-                                 }
-                                 }
-                                 });
-
-                                    Apio.System.applyState(result[i].name);
-                                }*/
                               }
                             }
                           }
-                        }
-                      }
-                      Apio.Database.updateProperty(data, function() {
-                        Apio.io.emit('apio_server_update', data);
-                      });
+                          Apio.Database.updateProperty(data, function() {
+                            Apio.io.emit('apio_server_update', data);
+                          });
 
-                    });
-                  } else {
-                    Apio.Database.db.collection('Objects').findOne({
-                      objectId: data.objectId
-                    }, function(err, document) {
-                      if (err) {
-                        console.log('Apio.Serial.read Error while looking for notifications');
-                      } else {
-                        if (document.hasOwnProperty('notifications')) {
-                          for (var prop in data.properties) //prop è il nome della proprietà di cui cerco notifiche
-                            if (document.notifications.hasOwnProperty(prop)) {
-                            //Ho trovato una notifica da lanciare
-                            if (document.notifications[prop].hasOwnProperty(data.properties[prop])) {
-                              console.log("Ho trovato una notifica per la proprietà " + prop + " e per il valore corrispondente " + data.properties[prop])
-                              Apio.Database.getObjectById(data.objectId, function(result) {
-                                var notifica = {
-                                  objectId: data.objectId,
-                                  objectName: result.name,
-                                  message: document.notifications[prop][data.properties[prop]],
-                                  properties: data.properties,
-                                  timestamp: new Date().getTime()
-                                };
-                                console.log("Mando la notifica");
-                                Apio.System.notify(notifica);
-                              });
-                            } //Se ha una notifica per il valore attuale
-                            else {
-                              console.log("Ho una notifica registarata per quella property ma non per quel valore")
-                            }
-
-
-                          } else {
-                            console.log("L'oggetto non ha una notifica registrata per la proprietà " + prop)
-                          }
-                        }
-                      }
-                    });
-
-                    Apio.Database.db.collection('States')
-                      .find({
-                        objectId: data.objectId
-                      })
-                      .toArray(function(err, states) {
-                        console.log("CI sono " + states.length + " stati relativi all'oggetto " + data.objectId)
-                        var sensorPropertyName = Object.keys(data.properties)[0]
-                        states.forEach(function(state) {
-                          if (state.hasOwnProperty('sensors') && state.sensors.length > 0) {
-                            if (state.sensors.indexOf(sensorPropertyName) > -1 && Number(state.properties[sensorPropertyName]) == Number(data.properties[sensorPropertyName])) {
-
-                              console.log("Lo stato " + state.name + " è relativo al sensore che sta mandando notifiche ed il valore corrisponde")
-                              data.message = state.name
-                              Apio.System.notify(data);
-                            } else {
-                              console.log("sensorPropertyName = " + sensorPropertyName);
-                              console.log("state.sensors: ", state.sensors);
-                              console.log("state.properties: ", state.properties);
-                              console.log("data.properties: ", data.properties);
-                              console.log("Lo stato " + state.name + " NON è relativo al sensore che sta mandando notifiche")
-                            }
-                          }
-                        })
-                      })
-
-                    Apio.Database.updateProperty(data, function() {
-                      Apio.io.emit('apio_server_update', data);
-
-                      Apio.Database.db.collection('Objects')
-                        .findOne({
-                          objectId: data.objectId
-                        }, function(err, obj_data) {
-                          if (err || obj_data === null) {
-                            console.log("An error has occurred while trying to figure out a state name")
-                          } else {
-                            Apio.Database.db.collection('States')
-                              .find({
-                                objectId: obj_data.objectId
-                              }).toArray(function(error, states) {
-                                console.log("\n\n@@@@@@@@@@@@@@@@@@@")
-                                console.log("Inizio controllo stati")
-                                console.log("Ho " + states.length + " stati relativi all'oggetto " + obj_data.objectId);
-                                states.forEach(function(state) {
-
-                                  var test = true;
-                                  for (var key in state.properties)
-                                    if (state.properties[key] !== obj_data.properties[key])
-                                      test = false;
-                                  if (test === true) {
-                                    console.log("Lo stato " + state.name + " corrisponde allo stato attuale dell'oggetto")
-
-                                    Apio.System.applyState(state.name, function(err) {
-
-                                      if (err) {
-                                        console.log("An error has occurred while applying the matched state")
-                                      }
-                                    }, true)
-
-
-                                  }
-                                })
-
-                                console.log("Fine controllo degli stati\n\n@@@@@@@@@@@@@@@@@@@@@@@")
-                              });
-                          }
-                        })
-                    });
-                  }
-                }
-              });
-            }
-            break;
-          case "request":
-            console.log("> Arrivato un update, mando la notifica");
-            //Prima di tutto cerco la notifica nel db
-            console.log(data);
-            //Controllo Se esiste uno stato che rispecchia lo stato attuale dell'oggetto
-
-            if (Apio.Database.db) {
-              Apio.Database.db.collection('Objects').findOne({
-                objectId: data.objectId
-              }, function(err, document) {
-                if (err) {
-                  console.log('Apio.Serial.read Error while looking for notifications');
-                } else {
-                  if (document.hasOwnProperty('notifications')) {
-                    for (var prop in data.properties) //prop è il nome della proprietà di cui cerco notifiche
-                      if (document.notifications.hasOwnProperty(prop)) {
-                      //Ho trovato una notifica da lanciare
-                      if (document.notifications[prop].hasOwnProperty(data.properties[prop])) {
-                        console.log("Ho trovato una notifica per la proprietà " + prop + " e per il valore corrispondente " + data.properties[prop])
-                        Apio.Database.getObjectById(data.objectId, function(result) {
-                          var notifica = {
-                            objectId: data.objectId,
-                            objectName: result.name,
-                            message: document.notifications[prop][data.properties[prop]],
-                            properties: data.properties,
-                            timestamp: new Date().getTime()
-                          };
-                          console.log("Mando la notifica");
-                          Apio.System.notify(notifica);
                         });
-                      } //Se ha una notifica per il valore attuale
-                      else {
-                        console.log("Ho una notifica registarata per quella property ma non per quel valore")
-                      }
-
-
-                    } else {
-                      console.log("L'oggetto non ha una notifica registrata per la proprietà " + prop)
-                    }
-                  }
-                }
-              })
-              Apio.Database.db.collection('States')
-                .find({
-                  objectId: data.objectId
-                })
-                .toArray(function(err, states) {
-                  console.log("CI sono " + states.length + " stati relativi all'oggetto " + data.objectId)
-                  var sensorPropertyName = Object.keys(data.properties)[0]
-                  states.forEach(function(state) {
-                    if (state.hasOwnProperty('sensors') && state.sensors.length > 0) {
-                      if (state.sensors.indexOf(sensorPropertyName) > -1 && Number(state.properties[sensorPropertyName]) == Number(data.properties[sensorPropertyName])) {
-
-                        console.log("Lo stato " + state.name + " è relativo al sensore che sta mandando notifiche ed il valore corrisponde")
-                        data.message = state.name
-                        Apio.System.notify(data);
                       } else {
-                        console.log("sensorPropertyName = " + sensorPropertyName);
-                        console.log("state.sensors: ", state.sensors);
-                        console.log("state.properties: ", state.properties);
-                        console.log("data.properties: ", data.properties);
-                        console.log("Lo stato " + state.name + " NON è relativo al sensore che sta mandando notifiche")
-                      }
-                    }
-                  })
-                })
-
-              Apio.Database.updateProperty(data, function() {
-                Apio.io.emit('apio_server_update', data);
-
-                Apio.Database.db.collection('Objects')
-                  .findOne({
-                    objectId: data.objectId
-                  }, function(err, obj_data) {
-                    if (err || obj_data === null) {
-                      console.log("An error has occurred while trying to figure out a state name")
-                    } else {
-                      Apio.Database.db.collection('States')
-                        .find({
-                          objectId: obj_data.objectId
-                        }).toArray(function(error, states) {
-                          console.log("\n\n@@@@@@@@@@@@@@@@@@@")
-                          console.log("Inizio controllo stati")
-                          console.log("Ho " + states.length + " stati relativi all'oggetto " + obj_data.objectId);
-                          states.forEach(function(state) {
-
-                            var test = true;
-                            for (var key in state.properties)
-                              if (state.properties[key] !== obj_data.properties[key])
-                                test = false;
-                            if (test === true) {
-                              console.log("Lo stato " + state.name + " corrisponde allo stato attuale dell'oggetto")
-
-                              Apio.System.applyState(state.name, function(err) {
-
-                                if (err) {
-                                  console.log("An error has occurred while applying the matched state")
+                        Apio.Database.db.collection('Objects').findOne({
+                          objectId: data.objectId
+                        }, function(err, document) {
+                          if (err) {
+                            console.log('Apio.Serial.read Error while looking for notifications');
+                          } else {
+                            if (document.hasOwnProperty('notifications')) {
+                              for (var prop in data.properties) //prop è il nome della proprietà di cui cerco notifiche
+                                if (document.notifications.hasOwnProperty(prop)) {
+                                //Ho trovato una notifica da lanciare
+                                if (document.notifications[prop].hasOwnProperty(data.properties[prop])) {
+                                  console.log("Ho trovato una notifica per la proprietà " + prop + " e per il valore corrispondente " + data.properties[prop])
+                                  Apio.Database.getObjectById(data.objectId, function(result) {
+                                    var notifica = {
+                                      objectId: data.objectId,
+                                      objectName: result.name,
+                                      message: document.notifications[prop][data.properties[prop]],
+                                      properties: data.properties,
+                                      timestamp: new Date().getTime()
+                                    };
+                                    console.log("Mando la notifica");
+                                    Apio.System.notify(notifica);
+                                  });
+                                } //Se ha una notifica per il valore attuale
+                                else {
+                                  console.log("Ho una notifica registarata per quella property ma non per quel valore")
                                 }
-                              }, true)
 
 
+                              } else {
+                                console.log("L'oggetto non ha una notifica registrata per la proprietà " + prop)
+                              }
                             }
+                          }
+                        });
+
+                        Apio.Database.db.collection('States')
+                          .find({
+                            objectId: data.objectId
+                          })
+                          .toArray(function(err, states) {
+                            console.log("CI sono " + states.length + " stati relativi all'oggetto " + data.objectId)
+                            var sensorPropertyName = Object.keys(data.properties)[0]
+                            states.forEach(function(state) {
+                              if (state.hasOwnProperty('sensors') && state.sensors.length > 0) {
+                                if (state.sensors.indexOf(sensorPropertyName) > -1 && Number(state.properties[sensorPropertyName]) == Number(data.properties[sensorPropertyName])) {
+
+                                  console.log("Lo stato " + state.name + " è relativo al sensore che sta mandando notifiche ed il valore corrisponde")
+                                  data.message = state.name
+                                  Apio.System.notify(data);
+                                } else {
+                                  console.log("sensorPropertyName = " + sensorPropertyName);
+                                  console.log("state.sensors: ", state.sensors);
+                                  console.log("state.properties: ", state.properties);
+                                  console.log("data.properties: ", data.properties);
+                                  console.log("Lo stato " + state.name + " NON è relativo al sensore che sta mandando notifiche")
+                                }
+                              }
+                            })
                           })
 
-                          console.log("Fine controllo degli stati\n\n@@@@@@@@@@@@@@@@@@@@@@@")
+                        Apio.Database.updateProperty(data, function() {
+                          Apio.io.emit('apio_server_update', data);
+
+                          Apio.Database.db.collection('Objects')
+                            .findOne({
+                              objectId: data.objectId
+                            }, function(err, obj_data) {
+                              if (err || obj_data === null) {
+                                console.log("An error has occurred while trying to figure out a state name")
+                              } else {
+                                Apio.Database.db.collection('States')
+                                  .find({
+                                    objectId: obj_data.objectId
+                                  }).toArray(function(error, states) {
+                                    console.log("\n\n@@@@@@@@@@@@@@@@@@@")
+                                    console.log("Inizio controllo stati")
+                                    console.log("Ho " + states.length + " stati relativi all'oggetto " + obj_data.objectId);
+                                    states.forEach(function(state) {
+
+                                      var test = true;
+                                      for (var key in state.properties)
+                                        if (state.properties[key] !== obj_data.properties[key])
+                                          test = false;
+                                      if (test === true) {
+                                        console.log("Lo stato " + state.name + " corrisponde allo stato attuale dell'oggetto")
+
+                                        Apio.System.applyState(state.name, function(err) {
+
+                                          if (err) {
+                                            console.log("An error has occurred while applying the matched state")
+                                          }
+                                        }, true)
+
+
+                                      }
+                                    })
+
+                                    console.log("Fine controllo degli stati\n\n@@@@@@@@@@@@@@@@@@@@@@@")
+                                  });
+                              }
+                            })
                         });
+                      }
+                    }
+                  });
+                }
+                break;
+              case "request":
+                console.log("> Arrivato un update, mando la notifica");
+                //Prima di tutto cerco la notifica nel db
+                console.log(data);
+                //Controllo Se esiste uno stato che rispecchia lo stato attuale dell'oggetto
+
+                if (Apio.Database.db) {
+                  Apio.Database.db.collection('Objects').findOne({
+                    objectId: data.objectId
+                  }, function(err, document) {
+                    if (err) {
+                      console.log('Apio.Serial.read Error while looking for notifications');
+                    } else {
+                      if (document.hasOwnProperty('notifications')) {
+                        for (var prop in data.properties) //prop è il nome della proprietà di cui cerco notifiche
+                          if (document.notifications.hasOwnProperty(prop)) {
+                          //Ho trovato una notifica da lanciare
+                          if (document.notifications[prop].hasOwnProperty(data.properties[prop])) {
+                            console.log("Ho trovato una notifica per la proprietà " + prop + " e per il valore corrispondente " + data.properties[prop])
+                            Apio.Database.getObjectById(data.objectId, function(result) {
+                              var notifica = {
+                                objectId: data.objectId,
+                                objectName: result.name,
+                                message: document.notifications[prop][data.properties[prop]],
+                                properties: data.properties,
+                                timestamp: new Date().getTime()
+                              };
+                              console.log("Mando la notifica");
+                              Apio.System.notify(notifica);
+                            });
+                          } //Se ha una notifica per il valore attuale
+                          else {
+                            console.log("Ho una notifica registarata per quella property ma non per quel valore")
+                          }
+
+
+                        } else {
+                          console.log("L'oggetto non ha una notifica registrata per la proprietà " + prop)
+                        }
+                      }
                     }
                   })
-              });
-            }
-            break;
-          case "hi":
-            console.log("Ho riconosciuto la parola chiave hi");
-            console.log("L'indirizzo fisico dell'oggetto che si è appena connesso è " + data.objectId);
-            Apio.Database.db.collection('Objects').findOne({
-              address: data.objectId
-            }, function(err, document) {
-              if (err) {
-                console.log("non esiste un oggetto con address " + data.objectId);
-              } else {
-                console.log("l'oggetto con address " + data.objectId + " è " + document.objectId);
-                var notifica = {
-                  objectId: document.objectId,
-                  objectName: document.name,
-                  message: document.name + " is now online",
-                  properties: 'online',
-                  timestamp: new Date().getTime()
-                };
-                Apio.System.notify(notifica);
-                Apio.Database.db.collection('States').findOne({
-                  name: "Connected" + document.objectId
-                }, function(err, doc) {
-                  if (!doc) {
-                    console.log("Lo stato non esiste, quindi lo creo");
-                    var req_data = {
-                      json: true,
-                      uri: "http://localhost:8083/apio/state",
-                      method: "POST",
-                      body: {
-                        state: {
-                          active: false,
-                          name: "Connected: " + document.objectName,
-                          objectName: document.objectName,
-                          objectId: document.objectId
-                        }
-                      }
-                    }
-                    var req = request(req_data, function(error, response, body) {
-                      console.log("Try to launch state associated: ");
-                      console.log(body);
-                      if ("200" === response.statusCode || 200 === response.statusCode) {
-                        console.log("ok");
-                        return true;
-                      } else {
+                  Apio.Database.db.collection('States')
+                    .find({
+                      objectId: data.objectId
+                    })
+                    .toArray(function(err, states) {
+                      console.log("CI sono " + states.length + " stati relativi all'oggetto " + data.objectId)
+                      var sensorPropertyName = Object.keys(data.properties)[0]
+                      states.forEach(function(state) {
+                        if (state.hasOwnProperty('sensors') && state.sensors.length > 0) {
+                          if (state.sensors.indexOf(sensorPropertyName) > -1 && Number(state.properties[sensorPropertyName]) == Number(data.properties[sensorPropertyName])) {
 
-                        console.log("no");
-                        return false;
-                      }
+                            console.log("Lo stato " + state.name + " è relativo al sensore che sta mandando notifiche ed il valore corrisponde")
+                            data.message = state.name
+                            Apio.System.notify(data);
+                          } else {
+                            console.log("sensorPropertyName = " + sensorPropertyName);
+                            console.log("state.sensors: ", state.sensors);
+                            console.log("state.properties: ", state.properties);
+                            console.log("data.properties: ", data.properties);
+                            console.log("Lo stato " + state.name + " NON è relativo al sensore che sta mandando notifiche")
+                          }
+                        }
+                      })
                     })
 
-                  } else {
-                    var o = {};
-                    o.name = "Connected" + document.objectId;
-                    var req_data = {
-                      json: true,
-                      uri: "http://localhost:8083/apio/state/apply",
-                      method: "POST",
-                      body: {
-                        state: {
-                          name: o.name
-                        }
-                      }
-                    }
-                    var req = request(req_data, function(error, response, body) {
-                      console.log("Try to launch state associated: ");
-                      console.log(body);
-                      if ("200" === response.statusCode || 200 === response.statusCode) {
-                        console.log("ok");
-                        return true;
-                      } else {
+                  Apio.Database.updateProperty(data, function() {
+                    Apio.io.emit('apio_server_update', data);
 
-                        console.log("no");
-                        return false;
+                    Apio.Database.db.collection('Objects')
+                      .findOne({
+                        objectId: data.objectId
+                      }, function(err, obj_data) {
+                        if (err || obj_data === null) {
+                          console.log("An error has occurred while trying to figure out a state name")
+                        } else {
+                          Apio.Database.db.collection('States')
+                            .find({
+                              objectId: obj_data.objectId
+                            }).toArray(function(error, states) {
+                              console.log("\n\n@@@@@@@@@@@@@@@@@@@")
+                              console.log("Inizio controllo stati")
+                              console.log("Ho " + states.length + " stati relativi all'oggetto " + obj_data.objectId);
+                              states.forEach(function(state) {
+
+                                var test = true;
+                                for (var key in state.properties)
+                                  if (state.properties[key] !== obj_data.properties[key])
+                                    test = false;
+                                if (test === true) {
+                                  console.log("Lo stato " + state.name + " corrisponde allo stato attuale dell'oggetto")
+
+                                  Apio.System.applyState(state.name, function(err) {
+
+                                    if (err) {
+                                      console.log("An error has occurred while applying the matched state")
+                                    }
+                                  }, true)
+
+
+                                }
+                              })
+
+                              console.log("Fine controllo degli stati\n\n@@@@@@@@@@@@@@@@@@@@@@@")
+                            });
+                        }
+                      })
+                  });
+                }
+                break;
+              case "hi":
+                console.log("Ho riconosciuto la parola chiave hi");
+                console.log("L'indirizzo fisico dell'oggetto che si è appena connesso è " + data.objectId);
+                Apio.Database.db.collection('Objects').findOne({
+                  objectId: data.objectId
+                }, function(err, document) {
+                  if (err) {
+                    console.log("non esiste un oggetto con address " + data.objectId);
+                  } else {
+                    console.log("l'oggetto con address " + data.objectId + " è " + document.objectId);
+                    var notifica = {
+                      objectId: document.objectId,
+                      objectName: document.name,
+                      message: document.name + " is now online",
+                      properties: 'online',
+                      timestamp: new Date().getTime()
+                    };
+                    Apio.System.notify(notifica);
+                    Apio.Database.db.collection('States').findOne({
+                      name: "Connected" + document.objectId
+                    }, function(err, doc) {
+                      if (!doc) {
+                        console.log("Lo stato non esiste, quindi lo creo");
+                        var req_data = {
+                          json: true,
+                          uri: "http://localhost:8083/apio/state",
+                          method: "POST",
+                          body: {
+                            state: {
+                              active: false,
+                              name: "Connected: " + document.objectName,
+                              objectName: document.objectName,
+                              objectId: document.objectId
+                            }
+                          }
+                        }
+                        var req = request(req_data, function(error, response, body) {
+                          console.log("Try to launch state associated: ");
+                          console.log(body);
+                          if ("200" === response.statusCode || 200 === response.statusCode) {
+                            console.log("ok");
+                            return true;
+                          } else {
+
+                            console.log("no");
+                            return false;
+                          }
+                        })
+
+                      } else {
+                        var o = {};
+                        o.name = "Connected" + document.objectId;
+                        var req_data = {
+                          json: true,
+                          uri: "http://localhost:8083/apio/state/apply",
+                          method: "POST",
+                          body: {
+                            state: {
+                              name: o.name
+                            }
+                          }
+                        }
+                        var req = request(req_data, function(error, response, body) {
+                          console.log("Try to launch state associated: ");
+                          console.log(body);
+                          if ("200" === response.statusCode || 200 === response.statusCode) {
+                            console.log("ok");
+                            return true;
+                          } else {
+
+                            console.log("no");
+                            return false;
+                          }
+                        })
+
                       }
                     })
 
                   }
-                })
 
-              }
+                  //app.post("/apio/state/apply", o);
 
-              //app.post("/apio/state/apply", o);
+                });
+                //Attivare lo stato Hi associato alla scheda che arriva:
 
-            });
-            //Attivare lo stato Hi associato alla scheda che arriva:
+                //TODO
+                break;
+              default:
+                //Il
+                break;
+            }
 
-            //TODO
-            break;
-          default:
-            //Il
-            break;
+
+
+
+
+          })
         }
+
 
       };
 
