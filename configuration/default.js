@@ -21,8 +21,8 @@ module.exports = {
 
 	database : {
 		hostname: "127.0.0.1",
-        database: "apio",
-        port: "27017"
+    database: "apio",
+    port: "27017"
 	}
 
 

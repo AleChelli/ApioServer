@@ -881,6 +881,7 @@
 
 
           var message = protocol + address + ":" + key + ":" + value + "-";
+          //console.log(message);
           switch (protocol) {
             case 'l':
             case 'z':
@@ -2110,6 +2111,8 @@
                   event : 'update',
                   value : data
               })
+              //console.log("Sono dentro Object.update e data vale "+data)
+
           if (data.writeToDatabase === true) {
               Apio.Database.updateProperty(data, function() {
                   //Connected clients are notified of the change in the database
@@ -2125,6 +2128,7 @@
               });
           } else {
               if (data.writeToSerial === true && Apio.Configuration.serial.enabled == true) {
+                //console.log(data);
                   Apio.Serial.send(data, function() {
                       callback(); //solo serial
                   });
@@ -2140,7 +2144,7 @@
       Apio.System = {
           ApioIdentifier: null
       };
-      
+
       Apio.System.launchEvent = function(eventName, callback) {
         Apio.Database.db.collection('Events')
           .find({

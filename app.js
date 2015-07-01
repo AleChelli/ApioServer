@@ -1158,12 +1158,16 @@ Apio.io.on("connection", function(socket){
         Apio.Database.updateProperty(data, function(){
             socket.broadcast.emit("apio_server_update_", data);
         });
+        console.log("input");
+        console.log(data);
         Apio.Serial.send(data);
     });
 
     //Streaming
     socket.on("apio_client_stream", function(data){
         socket.broadcast.emit("apio_server_update", data);
+        console.log("apio_client_stream");
+        console.log(data)
         Apio.Serial.stream(data);
     })
 
