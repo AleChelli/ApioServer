@@ -995,6 +995,10 @@
                 keys.forEach(function(key) {
                   packageMessageAndAddToQueue(data.protocol, data.address, key, data.properties[key], function(err) {})
                 })
+                if (callback) {
+                    //console.log("PARTE LA CALLBACK DELLA SERIAL");
+                    callback();
+                }
 
               }
             })
@@ -2163,10 +2167,52 @@
 
       Apio.State.apply = function(stateName, callback, options) {
           getStateByName(stateName, function(error, state) {
+	          console.log("Lo stato che vado ad applicare:");
+	          console.log(state)
+	          /*if (state.active == true) {
+                            console.log("Lo stato è attivo")
+                            Apio.Database.db.collection('States').update({
+                                name: state.name
+                            }, {
+                                $set: {
+                                    active: false
+                                }
+                            }, function(errOnActive) {
+                                if (errOnActive) {
+                                    console.log("Impossibile settare il flag dello stato");
+                                    callback(new Error('Impossibile settare il flag dello stato'))
+                                } else {
+                                    var s = state;
+                                    s.active = false;
+                                    Apio.io.emit('apio_state_update', s);
+                                }
+                            })
+                        } else {
+                            console.log("Lo stato è disattivo")
+                            arr.push(state);
+                            Apio.Database.db.collection('States').update({
+                                name: state.name
+                            }, {
+                                $set: {
+                                    active: true
+                                }
+                            }, function(err) {
+                                if (err) {
+                                    console.log("Non ho potuto settare il flag a true");
+                                } else {
+                                    var s = state;
+                                    s.active = true;
+                                    Apio.io.emit('apio_state_update', s);
+                                }
+                            })
+                         }*/
+                        
+                           
 
 
               Apio.Database.updateProperty(state, function() {
                   Apio.Serial.send(state, function() {
+	                  //Apio.io.emit("apio_server_update", data);
 
 
                       if (callback) {
@@ -2371,10 +2417,14 @@
 
       Apio.State.apply = function(stateName, callback, options) {
           getStateByName(stateName, function(error, state) {
-
+	          console.log(state);
+			  //state.active=true;
 
               Apio.Database.updateProperty(state, function() {
                   Apio.Serial.send(state, function() {
+	                  Apio.io.emit("apio_server_update", state);
+	                  
+	                  //Apio.io.emit("apio_state_update", state);
 
 
                       if (callback) {

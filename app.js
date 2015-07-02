@@ -559,6 +559,8 @@ app.post('/apio/adapter',function(req,res){
                 });
 })
 
+
+
 //New: Rotta che gestisce il restore del database
 app.get('/apio/restore', function(req, res){
       var sys = require('sys');
@@ -602,6 +604,13 @@ app.get('/apio/notifications/listDisabled',routes.notifications.listdisabled);
 app.post('/apio/notifications/markAsRead',routes.notifications.delete);
 app.post('/apio/notifications/disable',routes.notifications.disable);
 app.post('/apio/notifications/enable',routes.notifications.enable);
+
+
+//Routes
+app.post('/apio/user', routes.users.create)
+app.get('/apio/user', routes.users.list)
+app.post('/apio/user/authenticate', routes.users.authenticate)
+app.get('/apio/user/logout', routes.users.logout)
 
 
     app.post('/apio/notify',function(req,res){
