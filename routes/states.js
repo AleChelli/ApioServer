@@ -27,7 +27,7 @@ module.exports = function(Apio){
                         name: req.params.name
                     });
 	            }
-                
+
                 res.send(response);
             })
 
@@ -35,13 +35,16 @@ module.exports = function(Apio){
         //TODO:
         //E' implementata male bisogna verificarla e farla in maniera tale che rilancia una callback se tutto va bene cosi fa cagare
         apply: function(req, res) {
-            var state = req.body.state;
-			console.log("Devo applicare "+state.name)
-			Apio.System.applyState(state.name);
-			res.send({});
+					Apio.State.apply(req.body.state.name,function(){
+				Apio.Util.log("HTTP requested to apply state "+req.body.state.name)
+				//Apio.Remote.socket.emit('apio.server.state.apply',{stateName : req.body.state.name});
+				res.send();
+		});
+
+},
 		},
-		
-		
+
+
         getByName: function(req, res) {
             Apio.State.getByName(req.params.name,function(err,data){
                 if (err) {
