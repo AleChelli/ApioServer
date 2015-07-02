@@ -81,6 +81,7 @@ angular.module('ApioApplication').controller('ApioWallController', ['$scope', '$
             state.active = !state.active;
             $http.post('/apio/state/apply', {
                 state: state
+   
             })
                 .success(function() {
                     console.log("Stato applicato con successo")

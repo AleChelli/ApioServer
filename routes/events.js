@@ -12,7 +12,9 @@ module.exports = function(Apio){
                     res.status(500).send({})
                 }
                 else {
-                    Apio.Remote.socket.emit("apio.server.event.create", e);
+                    if(Apio.Configuration.remote.enabled==true){
+	                    Apio.Remote.socket.emit("apio.server.event.create", e);
+                    }
                     res.send(response)
                 }
             });
@@ -25,7 +27,10 @@ module.exports = function(Apio){
                 if (err)
                     res.status(500).send(response)
                 else {
-                    Apio.Remote.socket.emit('apio.server.event.update',{name: req.params.name,eventUpdate:req.body.eventUpdate})
+	                if(Apio.Configuration.remote.enabled==true){
+		                Apio.Remote.socket.emit('apio.server.event.update',{name: req.params.name,eventUpdate:req.body.eventUpdate})
+	                }
+                    
                     res.send(response);
                 }
             })
@@ -36,9 +41,13 @@ module.exports = function(Apio){
                 if (err)
                     res.status(500).send(err)
                 else{
-                    Apio.Remote.socket.emit("apio.server.event.delete", {
+	                
+	                if(Apio.Configuration.remote.enabled==true){
+		                Apio.Remote.socket.emit("apio.server.event.delete", {
                                 name: req.params.name
-                    });
+                    	});
+		            }
+                    
                     res.send();
                 }
             })
