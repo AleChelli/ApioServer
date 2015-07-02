@@ -42,7 +42,6 @@ module.exports = function(Apio){
 		});
 
 },
-		},
 
 
         getByName: function(req, res) {
